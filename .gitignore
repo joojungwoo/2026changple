@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# 작업 전 백업 (로컬 전용)
+.backup-*/
+
+# Claude Code 로컬 설정
+.claude/
+
+# 보고서 문서 (배포 대상 아님)
+*.docx

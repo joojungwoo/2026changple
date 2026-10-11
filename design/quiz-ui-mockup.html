@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>차근차근 · 게임형 퀴즈 UI 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap" rel="stylesheet" />
+<style>
+/* =======================================================================
+ * 차근차근 — 게임형 퀴즈 UI 시안 (Figma 이관용 스펙 겸 목업)
+ * 참고: 레벨맵형 캐주얼 게임 UI (구불구불 경로 + 별 3개 + 보물상자 + HUD)
+ * 원칙 유지: 큰 글씨 / 밝은 색 / 단순 레이아웃 / 텍스트 최소·아이콘 최대
+ * ===================================================================== */
+:root{
+  /* --- 기존 앱 토큰 계승 --- */
+  --ink:#2a2a33; --ink-soft:#6b6b7b; --surface:#ffffff;
+  --math:#6c5ce7; --korean:#e8813c;
+  --ok:#2e9e5b; --no:#d94a4a; --warn:#e0a020;
+
+  /* --- 게임 레이어 신규 토큰 --- */
+  --sky-1:#8fd3f4; --sky-2:#c3ecff;
+  --grass-1:#7fd66f; --grass-2:#4fb457;
+  --path:#e8c98a; --path-line:#c9a463;
+  --gold:#ffc93c; --gold-deep:#e59b12;
+  --node:#ffffff; --node-lock:#b9c2cc;
+  --panel:#ffffff; --panel-line:#2a2a33;
+
+  /* 두꺼운 외곽선 + 아래쪽 두께 = 게임 버튼의 핵심 */
+  --stroke:3px solid var(--panel-line);
+  --r-lg:24px; --r-md:18px; --r-sm:12px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:40px 24px 64px;
+  background:#f1f3f6;
+  font-family:'Gowun Dodum','Apple SD Gothic Neo',system-ui,sans-serif;
+  color:var(--ink); font-size:17px; line-height:1.55;
+}
+h1,h2,h3,.jua{font-family:'Jua','Gowun Dodum',sans-serif; font-weight:400; letter-spacing:-.01em}
+
+/* ---------------- 캔버스 / 아트보드 ---------------- */
+.canvas-head{max-width:1740px; margin:0 auto 28px}
+.canvas-head h1{font-size:30px; margin:0 0 6px}
+.canvas-head p{margin:0; color:var(--ink-soft)}
+.board-row{
+  display:flex; gap:36px; align-items:flex-start;
+  max-width:1740px; margin:0 auto; flex-wrap:wrap;
+}
+.board{width:390px}
+.board-label{
+  font-family:'Jua',sans-serif; font-size:15px; color:var(--ink-soft);
+  margin:0 0 10px 4px; display:flex; align-items:center; gap:8px;
+}
+.board-label b{color:var(--ink); font-weight:400}
+.frame{
+  width:390px; height:800px; border-radius:34px; overflow:hidden;
+  border:var(--stroke); background:var(--surface);
+  box-shadow:0 14px 34px rgba(30,35,50,.18);
+  position:relative; display:flex; flex-direction:column;
+}
+
+/* ---------------- 공통: HUD ---------------- */
+.hud{
+  position:relative; z-index:5; flex:0 0 auto;
+  display:flex; align-items:center; gap:8px; padding:14px 14px 12px;
+}
+.pill{
+  display:flex; align-items:center; gap:6px;
+  background:var(--surface); border:var(--stroke); border-bottom-width:4px;
+  border-radius:999px; padding:5px 12px 5px 8px;
+  font-family:'Jua',sans-serif; font-size:16px; white-space:nowrap;
+}
+.pill .ico{font-size:19px; line-height:1}
+.pill.gold{background:#fff6dc}
+.pill.heart{background:#ffeaea}
+.pill.star{background:#fff3d0}
+.hud-spacer{flex:1}
+.hud-btn{
+  width:44px; height:44px; border-radius:14px; display:grid; place-items:center;
+  background:var(--surface); border:var(--stroke); border-bottom-width:4px;
+  font-size:20px; cursor:pointer;
+}
+
+/* ---------------- ① 단원 맵 ---------------- */
+.map{
+  flex:1; position:relative; overflow:hidden;
+  background:
+    radial-gradient(120% 55% at 50% 0%, var(--sky-2) 0%, var(--sky-1) 55%, transparent 56%),
+    linear-gradient(180deg,#dff3ff 0%, #eaf9e4 26%, var(--grass-1) 40%, var(--grass-2) 100%);
+}
+.map .cloud{position:absolute; font-size:34px; opacity:.85; filter:drop-shadow(0 2px 0 rgba(255,255,255,.7))}
+.map .deco{position:absolute; font-size:26px}
+.map svg.path{position:absolute; inset:0; width:100%; height:100%}
+
+.node{
+  position:absolute; transform:translate(-50%,-50%);
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  text-align:center; cursor:pointer;
+}
+.node .disc{
+  width:66px; height:66px; border-radius:50%;
+  border:var(--stroke); border-bottom-width:6px;
+  background:var(--node); display:grid; place-items:center;
+  font-family:'Jua',sans-serif; font-size:26px; line-height:1;
+  box-shadow:0 4px 0 rgba(0,0,0,.12);
+}
+.node .disc small{display:block; font-size:11px; color:var(--ink-soft); margin-top:1px}
+.node.math .disc{background:#efe9ff}
+.node.korean .disc{background:#ffeedd}
+.node.done .disc{background:var(--gold); color:#4a3200}
+.node.lock .disc{background:var(--node-lock); color:#fff; box-shadow:none}
+.node.lock{opacity:.85}
+
+/* 현재 위치 노드 — 확대 + 펄스 링 + 캐릭터 */
+.node.now .disc{width:84px; height:84px; font-size:32px; background:#fff}
+.node.now::before{
+  content:''; position:absolute; top:42px; left:50%; width:104px; height:104px;
+  transform:translate(-50%,-50%); border-radius:50%;
+  border:4px solid rgba(255,255,255,.85); animation:pulse 1.8s ease-out infinite;
+}
+@keyframes pulse{
+  0%{transform:translate(-50%,-50%) scale(.82); opacity:.95}
+  100%{transform:translate(-50%,-50%) scale(1.22); opacity:0}
+}
+.node .avatar{position:absolute; top:-34px; font-size:38px; filter:drop-shadow(0 3px 2px rgba(0,0,0,.2))}
+
+.stars{display:flex; gap:2px; font-size:16px; line-height:1;
+  background:rgba(255,255,255,.9); border-radius:999px; padding:2px 7px;
+  border:2px solid rgba(42,42,51,.5);
+}
+.stars .off{filter:grayscale(1); opacity:.45}
+.node .name{
+  font-family:'Jua',sans-serif; font-size:14px; color:#1f3d1f;
+  background:rgba(255,255,255,.92); border-radius:999px; padding:1px 10px;
+  border:2px solid rgba(42,42,51,.45); max-width:118px;
+}
+
+.chest{position:absolute; transform:translate(-50%,-50%); text-align:center}
+.chest .box{
+  font-size:34px; filter:drop-shadow(0 3px 0 rgba(0,0,0,.18));
+  animation:bob 2.4s ease-in-out infinite;
+}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.chest .cnt{
+  font-family:'Jua',sans-serif; font-size:13px; color:#4a3200;
+  background:var(--gold); border:2px solid var(--panel-line); border-radius:999px; padding:0 8px;
+}
+
+/* 하단 탭바 */
+.tabbar{
+  flex:0 0 auto; display:flex; gap:6px; padding:10px 12px 16px;
+  background:var(--surface); border-top:var(--stroke);
+}
+.tab{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:6px 0; border-radius:14px; font-size:12px; color:var(--ink-soft);
+  border:2px solid transparent; background:none; cursor:pointer;
+}
+.tab .ti{font-size:24px; line-height:1}
+.tab.on{background:#eef1ff; border-color:var(--panel-line); color:var(--ink); font-family:'Jua',sans-serif}
+
+/* ---------------- ② 단원 카드(팝업) ---------------- */
+.scrim{position:absolute; inset:0; background:rgba(20,26,40,.45); z-index:8}
+.sheet{
+  position:absolute; z-index:9; left:16px; right:16px; top:104px;
+  background:var(--panel); border:var(--stroke); border-bottom-width:6px;
+  border-radius:var(--r-lg); padding:14px; box-shadow:0 12px 0 rgba(0,0,0,.15);
+}
+.sheet-tag{
+  position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+  background:var(--math); color:#fff; border:var(--stroke); border-radius:999px;
+  padding:2px 16px; font-family:'Jua',sans-serif; font-size:16px; white-space:nowrap;
+}
+.sheet h3{margin:10px 0 4px; font-size:22px; text-align:center}
+.sheet .sub{margin:0 0 12px; text-align:center; color:var(--ink-soft); font-size:14px}
+.preview{
+  height:112px; border-radius:var(--r-md); border:var(--stroke);
+  background:linear-gradient(160deg,#efe9ff,#dcd2ff);
+  display:grid; place-items:center; font-size:46px; margin-bottom:12px;
+}
+.star-goals{display:flex; gap:8px; margin-bottom:12px}
+.goal{
+  flex:1; text-align:center; border:var(--stroke); border-radius:var(--r-sm);
+  padding:8px 4px; background:#fffdf4;
+}
+.goal.hit{background:#fff3d0}
+.goal .g-star{font-size:22px; line-height:1.2}
+.goal .g-star.off{filter:grayscale(1); opacity:.4}
+.goal .g-lab{font-family:'Jua',sans-serif; font-size:13px; color:var(--ink-soft)}
+.rowline{
+  display:flex; justify-content:space-between; align-items:center;
+  border-top:2px dashed var(--panel-line); padding:8px 2px 0; font-size:15px;
+}
+.rowline b{font-family:'Jua',sans-serif}
+
+/* ---------------- 공통: 큰 버튼 ---------------- */
+.btn-game{
+  display:block; width:100%; text-align:center; cursor:pointer;
+  font-family:'Jua',sans-serif; font-size:22px; color:#fff;
+  background:var(--ok); border:var(--stroke); border-bottom-width:7px;
+  border-radius:var(--r-md); padding:13px 0 11px; margin-top:12px;
+}
+.btn-game:active{border-bottom-width:3px; transform:translateY(4px)}
+.btn-game.gold{background:var(--gold); color:#4a3200}
+.btn-game.ghost{background:var(--surface); color:var(--ink)}
+.btn-game[disabled]{background:#cdd3da; color:#fff; cursor:not-allowed; border-bottom-width:7px}
+
+/* ---------------- ③ 퀴즈 화면 ---------------- */
+.quiz{
+  flex:1; overflow:auto; padding:0 16px 18px;
+  background:linear-gradient(180deg,#f4f8ff 0%, #fdfbf6 220px);
+}
+.qbar{display:flex; align-items:center; gap:8px; margin-bottom:10px}
+.qbar .track{
+  flex:1; height:18px; border-radius:999px; background:#fff;
+  border:var(--stroke); overflow:hidden;
+}
+.qbar .fill{
+  height:100%; width:66%;
+  background:repeating-linear-gradient(115deg,var(--gold) 0 12px,var(--gold-deep) 12px 24px);
+}
+.qbar .cnt{font-family:'Jua',sans-serif; font-size:16px}
+.qstars{display:flex; gap:3px; font-size:20px}
+.qstars .off{filter:grayscale(1); opacity:.35}
+
+.badges{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px}
+.badge{
+  border:var(--stroke); border-bottom-width:4px; border-radius:999px;
+  padding:3px 11px; font-size:14px; background:var(--surface); white-space:nowrap;
+}
+.badge.type{background:#eef1ff}
+.badge.lv{background:#fff3d0; font-family:'Jua',sans-serif}
+
+.qcard{
+  border:var(--stroke); border-bottom-width:6px; border-radius:var(--r-lg);
+  background:var(--surface); padding:16px; box-shadow:0 6px 0 rgba(0,0,0,.08);
+}
+.qcard .visual{
+  font-size:34px; letter-spacing:4px; text-align:center;
+  background:#f6f8ff; border:2px dashed var(--panel-line);
+  border-radius:var(--r-md); padding:14px; margin-bottom:12px;
+}
+.qcard .qtext{margin:0; font-size:21px; font-family:'Jua',sans-serif; line-height:1.5}
+
+.hint-btn{
+  margin:12px 0 4px; width:100%; cursor:pointer;
+  background:#fff6dc; border:var(--stroke); border-bottom-width:5px;
+  border-radius:var(--r-md); padding:10px; font-family:'Jua',sans-serif; font-size:17px;
+}
+.hint-btn .cost{font-size:14px; color:var(--ink-soft)}
+
+.choices{display:grid; gap:10px; margin-top:12px}
+.choice{
+  display:flex; align-items:center; gap:12px; text-align:left; cursor:pointer;
+  background:var(--surface); border:var(--stroke); border-bottom-width:6px;
+  border-radius:var(--r-md); padding:12px 14px; font-size:19px; font-family:inherit;
+}
+.choice .no{
+  flex:0 0 auto; width:34px; height:34px; border-radius:10px;
+  border:2px solid var(--panel-line); display:grid; place-items:center;
+  font-family:'Jua',sans-serif; background:#f2f4f8;
+}
+.choice .mark{margin-left:auto; font-size:22px}
+.choice.sel{background:#eef1ff; border-color:var(--math)}
+.choice.sel .no{background:var(--math); color:#fff; border-color:var(--math)}
+.choice.correct{background:#e3f6e9; border-color:var(--ok)}
+.choice.correct .no{background:var(--ok); color:#fff; border-color:var(--ok)}
+.choice.wrong{background:#fdeaea; border-color:var(--no)}
+.choice.wrong .no{background:var(--no); color:#fff; border-color:var(--no)}
+.choice.dim{opacity:.45}
+
+.feedback{
+  margin-top:14px; border:var(--stroke); border-bottom-width:6px; border-radius:var(--r-lg);
+  padding:14px; background:#e3f6e9;
+}
+.feedback.no{background:#fdeaea}
+.fb-head{font-family:'Jua',sans-serif; font-size:20px; display:flex; align-items:center; gap:8px}
+.fb-head .reward{
+  margin-left:auto; background:var(--gold); border:2px solid var(--panel-line);
+  border-radius:999px; padding:0 10px; font-size:15px; color:#4a3200;
+}
+.feedback p{margin:8px 0 0; font-size:16px}
+.fb-note{
+  margin-top:10px; background:rgba(255,255,255,.75); border:2px dashed var(--panel-line);
+  border-radius:var(--r-sm); padding:8px 10px; font-size:15px;
+}
+
+/* ---------------- ④ 결과 화면 ---------------- */
+.result{
+  flex:1; overflow:hidden; position:relative; padding:8px 18px 18px;
+  background:linear-gradient(180deg,#fff6dc 0%, #ffeaa9 46%, #fdfbf6 47%, #fdfbf6 100%);
+  display:flex; flex-direction:column;
+}
+.confetti{position:absolute; font-size:22px; opacity:.9}
+.result h2{margin:6px 0 2px; text-align:center; font-size:28px}
+.result .rsub{margin:0 0 10px; text-align:center; color:#6b5a20; font-size:15px}
+.bigstars{display:flex; justify-content:center; align-items:flex-end; gap:8px; margin:4px 0 14px}
+.bigstars span{font-size:52px; filter:drop-shadow(0 4px 0 rgba(0,0,0,.15))}
+.bigstars span.mid{font-size:70px; margin-bottom:6px}
+.bigstars span.off{filter:grayscale(1); opacity:.35}
+.rgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.rbox{
+  border:var(--stroke); border-bottom-width:5px; border-radius:var(--r-md);
+  background:var(--surface); padding:12px; text-align:center;
+}
+.rbox .rnum{font-family:'Jua',sans-serif; font-size:28px; line-height:1.1}
+.rbox .rlab{font-size:14px; color:var(--ink-soft)}
+.reward-bar{
+  margin-top:12px; border:var(--stroke); border-bottom-width:5px; border-radius:var(--r-md);
+  background:#fff6dc; padding:12px 14px; display:flex; align-items:center; gap:10px;
+  font-family:'Jua',sans-serif; font-size:17px;
+}
+.reward-bar .plus{margin-left:auto; color:var(--gold-deep); font-size:20px}
+.streak{
+  margin-top:10px; display:flex; gap:6px; justify-content:center;
+}
+.streak i{
+  font-style:normal; width:36px; height:36px; border-radius:10px; display:grid; place-items:center;
+  border:2px solid var(--panel-line); background:#fff; font-size:17px;
+}
+.streak i.on{background:var(--gold)}
+.result-actions{margin-top:auto}
+
+/* ---------------- 스펙 노트 ---------------- */
+.notes{max-width:1740px; margin:44px auto 0; background:#fff; border:var(--stroke);
+  border-bottom-width:6px; border-radius:var(--r-lg); padding:22px 26px}
+.notes h2{margin:0 0 12px; font-size:22px}
+.notes table{width:100%; border-collapse:collapse; font-size:15px}
+.notes th,.notes td{border-bottom:1px solid #e6e8ee; padding:8px 6px; text-align:left; vertical-align:top}
+.notes th{font-family:'Jua',sans-serif; color:var(--ink-soft); font-weight:400; white-space:nowrap}
+.sw{display:inline-block; width:14px; height:14px; border-radius:4px; border:1px solid rgba(0,0,0,.25);
+  vertical-align:-2px; margin-right:6px}
+</style>
+</head>
+<body>
+
+<div class="canvas-head">
+  <h1>차근차근 — 게임형 퀴즈 UI 시안</h1>
+  <p>레벨맵형 캐주얼 게임 UI를 참고. 기존 원칙(큰 글씨·밝은 색·단순 레이아웃·아이콘 우선)은 그대로 두고, <b>동기부여 레이어</b>(별 3개·경로·보상·연속일)만 얹었습니다.</p>
+</div>
+
+<div class="board-row">
+
+  <!-- ============================ ① 단원 맵 ============================ -->
+  <div class="board">
+    <p class="board-label">① <b>단원 맵</b> — 기존 `screenChapters` 대체</p>
+    <div class="frame">
+      <div class="hud">
+        <span class="pill star"><span class="ico">⭐</span>24</span>
+        <span class="pill gold"><span class="ico">🪙</span>860</span>
+        <span class="pill heart"><span class="ico">❤️</span>5</span>
+        <span class="hud-spacer"></span>
+        <button class="hud-btn" title="복습">🔁</button>
+        <button class="hud-btn" title="내 기록">📊</button>
+      </div>
+
+      <div class="map">
+        <span class="cloud" style="top:14px; left:18px">☁️</span>
+        <span class="cloud" style="top:44px; right:22px; font-size:28px">☁️</span>
+        <span class="deco" style="top:180px; left:16px">🌳</span>
+        <span class="deco" style="top:330px; right:14px">🌲</span>
+        <span class="deco" style="top:470px; left:22px; font-size:22px">🌷</span>
+        <span class="deco" style="top:600px; right:26px">🌳</span>
+        <span class="deco" style="top:120px; right:96px; font-size:20px">🦋</span>
+
+        <!-- 구불구불 경로 -->
+        <svg class="path" viewBox="0 0 390 660" preserveAspectRatio="none">
+          <path d="M78 548 C 250 536, 300 500, 150 462 C 20 425, 60 350, 220 330 C 350 312, 340 240, 200 205 C 80 174, 90 110, 195 78"
+                fill="none" stroke="#c9a463" stroke-width="26" stroke-linecap="round"/>
+          <path d="M78 548 C 250 536, 300 500, 150 462 C 20 425, 60 350, 220 330 C 350 312, 340 240, 200 205 C 80 174, 90 110, 195 78"
+                fill="none" stroke="#e8c98a" stroke-width="18" stroke-linecap="round"/>
+          <path d="M78 548 C 250 536, 300 500, 150 462 C 20 425, 60 350, 220 330 C 350 312, 340 240, 200 205 C 80 174, 90 110, 195 78"
+                fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"
+                stroke-dasharray="2 18" opacity=".8"/>
+        </svg>
+
+        <!-- 1단원: 완료 (별3) -->
+        <div class="node math done" style="left:78px; top:548px">
+          <div class="disc">1</div>
+          <div class="stars"><span>⭐</span><span>⭐</span><span>⭐</span></div>
+          <div class="name">덧셈과 뺄셈</div>
+        </div>
+
+        <!-- 2단원: 완료 (별2) -->
+        <div class="node math done" style="left:196px; top:512px">
+          <div class="disc">2</div>
+          <div class="stars"><span>⭐</span><span>⭐</span><span class="off">⭐</span></div>
+          <div class="name">나눗셈</div>
+        </div>
+
+        <!-- 보물상자: 2단원마다 복습 보상 -->
+        <div class="chest" style="left:314px; top:432px">
+          <div class="box">🎁</div>
+          <div class="cnt">2/4</div>
+        </div>
+
+        <!-- 3단원: 현재 위치 -->
+        <div class="node math now" style="left:150px; top:400px">
+          <span class="avatar">🐣</span>
+          <div class="disc">3</div>
+          <div class="stars"><span class="off">⭐</span><span class="off">⭐</span><span class="off">⭐</span></div>
+          <div class="name">곱셈</div>
+        </div>
+
+        <!-- 4단원: 잠김 -->
+        <div class="node lock" style="left:255px; top:283px">
+          <div class="disc">🔒</div>
+          <div class="name">길이와 시간</div>
+        </div>
+
+        <!-- 5단원: 잠김 -->
+        <div class="node lock" style="left:118px; top:172px">
+          <div class="disc">🔒</div>
+          <div class="name">분수와 소수</div>
+        </div>
+
+        <!-- 단원 클리어 깃발 -->
+        <div class="chest" style="left:238px; top:86px">
+          <div class="box">🚩</div>
+          <div class="cnt">3학년 수학</div>
+        </div>
+      </div>
+
+      <div class="tabbar">
+        <button class="tab on"><span class="ti">🗺️</span>학습 맵</button>
+        <button class="tab"><span class="ti">🔁</span>복습 3</button>
+        <button class="tab"><span class="ti">🏅</span>내 기록</button>
+        <button class="tab"><span class="ti">🐣</span>내 캐릭터</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= ② 단원 카드(팝업) ======================= -->
+  <div class="board">
+    <p class="board-label">② <b>단원 시작 카드</b> — 노드 탭 시 팝업 (개념 → 문제)</p>
+    <div class="frame">
+      <div class="hud">
+        <span class="pill star"><span class="ico">⭐</span>24</span>
+        <span class="pill gold"><span class="ico">🪙</span>860</span>
+        <span class="pill heart"><span class="ico">❤️</span>5</span>
+        <span class="hud-spacer"></span>
+        <button class="hud-btn">🔁</button>
+        <button class="hud-btn">📊</button>
+      </div>
+
+      <div class="map" style="filter:blur(1px)">
+        <svg class="path" viewBox="0 0 390 660" preserveAspectRatio="none">
+          <path d="M78 548 C 250 536, 300 500, 150 462 C 20 425, 60 350, 220 330 C 350 312, 340 240, 200 205 C 80 174, 90 110, 195 78"
+                fill="none" stroke="#e8c98a" stroke-width="20" stroke-linecap="round"/>
+        </svg>
+        <span class="deco" style="top:180px; left:16px">🌳</span>
+        <span class="deco" style="top:520px; right:20px">🌲</span>
+      </div>
+      <div class="scrim"></div>
+
+      <div class="sheet">
+        <div class="sheet-tag">📐 3학년 수학 · 3단원</div>
+        <h3>곱셈</h3>
+        <p class="sub">문제 3개 · 예상 5분</p>
+
+        <div class="preview">✖️🍎🍎</div>
+
+        <div class="star-goals">
+          <div class="goal hit">
+            <div class="g-star">⭐</div>
+            <div class="g-lab">1문제<br>맞히기</div>
+          </div>
+          <div class="goal">
+            <div class="g-star off">⭐</div>
+            <div class="g-lab">2문제<br>맞히기</div>
+          </div>
+          <div class="goal">
+            <div class="g-star off">⭐</div>
+            <div class="g-lab">전부<br>맞히기</div>
+          </div>
+        </div>
+
+        <div class="rowline"><span>🖼️ 나오는 유형</span><b>구체물·그림형</b></div>
+        <div class="rowline"><span>🪙 다 풀면</span><b>+30 코인</b></div>
+
+        <button class="btn-game ghost">📖 개념 먼저 보기</button>
+        <button class="btn-game">▶ 문제 풀기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ ③ 퀴즈 ============================ -->
+  <div class="board">
+    <p class="board-label">③ <b>퀴즈 화면</b> — 기존 `screenQuiz` 대체</p>
+    <div class="frame">
+      <div class="hud" style="border-bottom:var(--stroke)">
+        <button class="hud-btn">←</button>
+        <span class="pill heart"><span class="ico">❤️</span>5</span>
+        <span class="hud-spacer"></span>
+        <span class="qstars"><span>⭐</span><span class="off">⭐</span><span class="off">⭐</span></span>
+      </div>
+
+      <div class="quiz">
+        <div class="qbar" style="margin-top:12px">
+          <span class="cnt">2/3</span>
+          <div class="track"><div class="fill"></div></div>
+          <span style="font-size:22px">🏁</span>
+        </div>
+
+        <div class="badges">
+          <span class="badge type">🖼️ 구체물·그림형</span>
+          <span class="badge lv">🙂 중</span>
+        </div>
+
+        <div class="qcard">
+          <div class="visual">🍎🍎🍎<br>🍎🍎🍎</div>
+          <p class="qtext">사과가 한 줄에 3개씩,<br>두 줄 있어요.<br>모두 몇 개일까요?</p>
+        </div>
+
+        <button class="hint-btn">💡 힌트 보기 <span class="cost">· 🪙 5</span></button>
+
+        <div class="choices">
+          <button class="choice"><span class="no">1</span><span>5개</span></button>
+          <button class="choice sel"><span class="no">2</span><span>6개</span><span class="mark">👆</span></button>
+          <button class="choice"><span class="no">3</span><span>8개</span></button>
+          <button class="choice"><span class="no">4</span><span>9개</span></button>
+        </div>
+
+        <button class="btn-game">답 고르기 완료!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= ④ 정답 피드백 ======================= -->
+  <div class="board">
+    <p class="board-label">④ <b>정답 피드백</b> — 같은 화면의 확인 상태</p>
+    <div class="frame">
+      <div class="hud" style="border-bottom:var(--stroke)">
+        <button class="hud-btn">←</button>
+        <span class="pill heart"><span class="ico">❤️</span>5</span>
+        <span class="hud-spacer"></span>
+        <span class="qstars"><span>⭐</span><span>⭐</span><span class="off">⭐</span></span>
+      </div>
+
+      <div class="quiz">
+        <div class="qbar" style="margin-top:12px">
+          <span class="cnt">2/3</span>
+          <div class="track"><div class="fill" style="width:100%"></div></div>
+          <span style="font-size:22px">🏁</span>
+        </div>
+
+        <div class="badges">
+          <span class="badge type">🖼️ 구체물·그림형</span>
+          <span class="badge lv">🙂 중</span>
+        </div>
+
+        <div class="qcard">
+          <p class="qtext" style="font-size:20px">사과가 한 줄에 3개씩,<br>두 줄 있어요. 모두 몇 개일까요?</p>
+        </div>
+
+        <div class="choices">
+          <button class="choice dim"><span class="no">1</span><span>5개</span></button>
+          <button class="choice correct"><span class="no">2</span><span>6개</span><span class="mark">⭕</span></button>
+          <button class="choice dim"><span class="no">3</span><span>8개</span></button>
+          <button class="choice dim"><span class="no">4</span><span>9개</span></button>
+        </div>
+
+        <div class="feedback">
+          <div class="fb-head">🎉 정답이에요!<span class="reward">⭐ +1</span></div>
+          <p>3개씩 2줄이니까 3 + 3 = 6.<br>곱셈으로는 3 × 2 = 6이에요.</p>
+        </div>
+
+        <button class="btn-game">다음 문제 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ ⑤ 오답 ============================ -->
+  <div class="board">
+    <p class="board-label">⑤ <b>오답 피드백</b> — 실패가 아니라 “다시 만나요”</p>
+    <div class="frame">
+      <div class="hud" style="border-bottom:var(--stroke)">
+        <button class="hud-btn">←</button>
+        <span class="pill heart"><span class="ico">❤️</span>4</span>
+        <span class="hud-spacer"></span>
+        <span class="qstars"><span>⭐</span><span class="off">⭐</span><span class="off">⭐</span></span>
+      </div>
+
+      <div class="quiz">
+        <div class="qbar" style="margin-top:12px">
+          <span class="cnt">2/3</span>
+          <div class="track"><div class="fill" style="width:100%"></div></div>
+          <span style="font-size:22px">🏁</span>
+        </div>
+
+        <div class="badges">
+          <span class="badge type">🪜 단계분해형</span>
+          <span class="badge lv">😀 하</span>
+        </div>
+
+        <div class="qcard">
+          <p class="qtext" style="font-size:20px">24 ÷ 4 는 얼마일까요?</p>
+        </div>
+
+        <div class="choices">
+          <button class="choice dim"><span class="no">1</span><span>4</span></button>
+          <button class="choice dim"><span class="no">2</span><span>5</span></button>
+          <button class="choice correct"><span class="no">3</span><span>6</span><span class="mark">⭕</span></button>
+          <button class="choice wrong"><span class="no">4</span><span>8</span><span class="mark">❌</span></button>
+        </div>
+
+        <div class="feedback no">
+          <div class="fb-head">💪 괜찮아요, 같이 봐요</div>
+          <p>24를 4씩 묶으면 6묶음이 돼요.<br>4 × 6 = 24 니까 답은 6이에요.</p>
+          <div class="fb-note">🔁 이 문제는 <b>복습 상자</b>에 담았어요. 내일 다시 만나요!</div>
+        </div>
+
+        <button class="btn-game gold">다시 한번 풀어보기 🔁</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ ⑥ 결과 ============================ -->
+  <div class="board">
+    <p class="board-label">⑥ <b>단원 완료</b> — 기존 `screenResult` 대체</p>
+    <div class="frame">
+      <div class="result">
+        <span class="confetti" style="top:12px; left:26px">🎊</span>
+        <span class="confetti" style="top:30px; right:34px">✨</span>
+        <span class="confetti" style="top:74px; left:60px; font-size:16px">🎉</span>
+        <span class="confetti" style="top:60px; right:70px; font-size:16px">✨</span>
+
+        <h2>3단원 클리어!</h2>
+        <p class="rsub">곱셈 · 3문제 중 2문제 정답</p>
+
+        <div class="bigstars">
+          <span>⭐</span><span class="mid">⭐</span><span class="off">⭐</span>
+        </div>
+
+        <div class="rgrid">
+          <div class="rbox"><div class="rnum">2 / 3</div><div class="rlab">맞힌 문제</div></div>
+          <div class="rbox"><div class="rnum">4분</div><div class="rlab">걸린 시간</div></div>
+        </div>
+
+        <div class="reward-bar">🪙 코인을 받았어요 <span class="plus">+30</span></div>
+
+        <div class="reward-bar" style="background:#eef1ff">
+          🔁 복습 상자에 <b style="font-family:'Jua'">1문제</b> 담김
+        </div>
+
+        <div class="streak">
+          <i class="on">월</i><i class="on">화</i><i class="on">수</i>
+          <i class="on">🔥</i><i>금</i><i>토</i><i>일</i>
+        </div>
+        <p style="text-align:center; font-size:14px; color:var(--ink-soft); margin:6px 0 0">
+          4일 연속 학습 중이에요!
+        </p>
+
+        <div class="result-actions">
+          <button class="btn-game">다음 단원으로 →</button>
+          <button class="btn-game ghost">🗺️ 학습 맵으로</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======================= 스펙 노트 (Figma 이관용) ======================= -->
+<div class="notes">
+  <h2>Figma 이관 스펙</h2>
+
+  <table>
+    <tr><th style="width:150px">컬러 변수</th>
+      <td>
+        <span class="sw" style="background:#8fd3f4"></span>sky/1 <code>#8FD3F4</code> ·
+        <span class="sw" style="background:#7fd66f"></span>grass/1 <code>#7FD66F</code> ·
+        <span class="sw" style="background:#4fb457"></span>grass/2 <code>#4FB457</code> ·
+        <span class="sw" style="background:#e8c98a"></span>path <code>#E8C98A</code> ·
+        <span class="sw" style="background:#ffc93c"></span>gold <code>#FFC93C</code> ·
+        <span class="sw" style="background:#6c5ce7"></span>math <code>#6C5CE7</code> ·
+        <span class="sw" style="background:#e8813c"></span>korean <code>#E8813C</code> ·
+        <span class="sw" style="background:#2e9e5b"></span>ok <code>#2E9E5B</code> ·
+        <span class="sw" style="background:#d94a4a"></span>no <code>#D94A4A</code> ·
+        <span class="sw" style="background:#2a2a33"></span>stroke <code>#2A2A33</code>
+      </td></tr>
+    <tr><th>타이포</th><td>제목·숫자·버튼 = <b class="jua">Jua</b> / 본문·문제 지문 = Gowun Dodum · 문제 지문 21px, 선택지 19px, 버튼 22px (아동 가독성 기준 최소 17px)</td></tr>
+    <tr><th>공통 스타일</th><td>외곽선 3px <code>#2A2A33</code>, 아래쪽만 4~7px 두껍게(입체감) · 라운드 24/18/12 · 눌림 = 아래 두께 3px + Y +4px</td></tr>
+    <tr><th>컴포넌트</th><td>
+      <b>MapNode</b> (variant: <code>state=done/now/lock</code>, <code>subject=math/korean</code>, <code>stars=0~3</code>) ·
+      <b>Pill/HUD</b> (<code>type=star/coin/heart</code>) ·
+      <b>ChoiceButton</b> (<code>state=default/selected/correct/wrong/dim</code>) ·
+      <b>GameButton</b> (<code>style=primary/gold/ghost/disabled</code>) ·
+      <b>Badge</b> (<code>kind=type/level</code>) ·
+      <b>FeedbackCard</b> (<code>result=ok/no</code>)
+    </td></tr>
+    <tr><th>프레임 크기</th><td>390 × 800 (iPhone 기준) · 좌우 여백 16 · 요소 간격 10 / 12 / 14</td></tr>
+  </table>
+
+  <h2 style="margin-top:22px">기존 데이터와의 매핑</h2>
+  <table>
+    <tr><th style="width:150px">게임 요소</th><th style="width:200px">기존 데이터</th><th>규칙</th></tr>
+    <tr><td>레벨 노드</td><td><code>Chapter</code></td><td>학년×과목당 5단원 = 경로 위 노드 5개</td></tr>
+    <tr><td>⭐ 별 1~3개</td><td><code>Question.level</code> 하·중·상</td><td>단원 내 3문제 중 맞힌 개수 = 별 개수</td></tr>
+    <tr><td>🔒 잠금</td><td>단원 완료 여부</td><td>앞 단원 별 1개 이상이면 해제 (막히지 않게 낮은 문턱)</td></tr>
+    <tr><td>🎁 보물상자</td><td><code>SpacedRepetition</code></td><td>복습 대상 4개 채우면 열기 → 코인 보상</td></tr>
+    <tr><td>🔥 연속일</td><td>스트릭</td><td>기존 규칙(하루 1문제) 그대로, 표시만 주간 캘린더로</td></tr>
+    <tr><td>❤️ 하트</td><td>신규</td><td><b>차감만 하고 잠그지 않음</b> — 다 떨어져도 계속 풀 수 있게. 좌절 방지</td></tr>
+    <tr><td>🪙 코인</td><td>신규</td><td>힌트 열기 / 캐릭터 꾸미기에만 사용. 학습 차단 용도로 쓰지 않음</td></tr>
+  </table>
+
+  <h2 style="margin-top:22px">경계선 지능 아동 대응 — 게임화하되 지킨 것</h2>
+  <table>
+    <tr><td>① <b>시간 압박 없음</b> — 타이머·카운트다운 미사용, 결과의 "걸린 시간"은 기록일 뿐 점수에 미반영</td></tr>
+    <tr><td>② <b>실패 표현 순화</b> — "틀렸습니다" 대신 "괜찮아요, 같이 봐요" + 즉시 풀이 + 복습 상자 안내</td></tr>
+    <tr><td>③ <b>한 화면 한 과제</b> — 문제 1개 + 선택지 4개만. 장식(구름·나무)은 맵 화면에만 배치</td></tr>
+    <tr><td>④ <b>진행이 항상 보임</b> — 상단 별 획득 + 2/3 진행바, "내가 지금 어디인지"를 캐릭터 🐣 위치로 표시</td></tr>
+    <tr><td>⑤ <b>큰 터치 영역</b> — 선택지 높이 최소 56px, 버튼 최소 48px</td></tr>
+  </table>
+</div>
+
+</body>
+</html>

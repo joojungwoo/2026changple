@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>피구 뺄셈 게임 | 공 던지고 남은 친구 세기</title>
+  <!--
+    피구 뺄셈 게임 (hangeoleumdodgeball의 DodgeballGame.tsx를 빌드 없이 돌아가도록 옮긴 것)
+    공을 드래그해 상대편 친구를 맞히고, 남은 친구 수를 계산해 입력하면 다음 공을 던질 수 있어요.
+  -->
+  <style>
+    :root { --bg: #e3f3e1; --ink: #23443a; --soft: #5d7a70; --card: #fffdf3; --line: #23443a; --main: #1f7a66; --no: #c8443c; --second: #cfe9c6; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: 'Jua', 'Gowun Dodum', 'Apple SD Gothic Neo', sans-serif; }
+    button, input { font: inherit; color: inherit; }
+    main { padding: 16px 10px 24px; }
+    header { text-align: center; margin: 0 auto 14px; max-width: 960px; }
+    h1 { margin: 0; font-size: clamp(22px, 5vw, 34px); text-shadow: 2px 2px 0 #b9d8b0; }
+    header p { margin: 8px 0 0; font-size: 14px; color: var(--soft); }
+    .game { margin: 0 auto; width: 100%; max-width: 960px; }
+    .game img { image-rendering: pixelated; }
+    .field { position: relative; width: 100%; aspect-ratio: 3 / 2; overflow: hidden; border: 4px solid var(--line); box-shadow: 4px 4px 0 var(--line); touch-action: none; user-select: none; -webkit-user-select: none; }
+    .field > img, .field > svg, .field > .zone { position: absolute; pointer-events: none; }
+    .court { inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .zone { left: 50%; top: 44%; width: 86%; height: 30%; transform: translateX(-50%); border: 2px dashed rgba(255, 255, 255, .7); }
+    .kid { transform-origin: bottom; transition: opacity .5s; }
+    .aim { inset: 0; width: 100%; height: 100%; }
+    .panel { border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line); background: var(--card); }
+    .hud { position: absolute; inset: 0 0 auto; display: flex; justify-content: space-between; gap: 8px; padding: 10px; pointer-events: none; }
+    .hud .panel { padding: 4px 10px; }
+    .hud small { display: block; font-size: 12px; color: var(--soft); }
+    .hud b { font-size: 24px; font-weight: 400; }
+    .tip { position: absolute; left: 8px; bottom: 8px; max-width: 70%; margin: 0; padding: 4px 10px; border: 2px solid var(--line); background: var(--card); font-size: 12px; pointer-events: none; }
+    .toast { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: max-content; max-width: 90%; margin: 0; padding: 12px 16px; text-align: center; font-size: 16px; pointer-events: none; }
+    /* 좁은 화면에서도 문제 창이 잘리지 않게 화면 전체를 덮어요. */
+    .cover { position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 10px; background: rgba(35, 68, 58, .5); }
+    .cover .panel { width: 100%; max-width: 480px; max-height: 100%; overflow: auto; padding: 14px; text-align: center; }
+    .cover h2 { margin: 4px 0 0; font-size: 21px; font-weight: 400; }
+    .lead { margin: 0; font-size: 14px; color: var(--main); }
+    .lineup { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 4px; margin-top: 10px; padding: 8px; border: 2px solid var(--line); background: var(--second); }
+    .lineup span { position: relative; width: 36px; height: 64px; }
+    .lineup img { width: 100%; height: 100%; object-fit: contain; }
+    .lineup .hit img { opacity: .35; transform: rotate(-25deg) translateY(6px); filter: grayscale(1); }
+    .lineup .hit::after { content: '✕'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--no); }
+    .note { margin: 6px 0 0; font-size: 12px; color: var(--soft); }
+    .sum { margin: 10px 0 0; font-size: 26px; }
+    .answer { margin-top: 10px; width: 128px; padding: 8px 16px; border: 2px solid var(--line); background: #fff; text-align: center; font-size: 26px; outline: none; }
+    .answer:focus { border-color: var(--main); }
+    .wrong { margin: 8px 0 0; font-size: 14px; color: var(--no); }
+    .btn { display: block; width: 100%; margin-top: 10px; padding: 12px; border: 2px solid var(--line); box-shadow: 4px 4px 0 var(--line); background: var(--main); color: #fff; font-size: 17px; cursor: pointer; }
+    .btn:active { transform: translate(2px, 2px); box-shadow: none; }
+    @media (prefers-reduced-motion: reduce) { .kid { transition: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>피구 뺄셈 게임</h1>
+      <p>공을 드래그해서 던지고, 남은 친구가 몇 명인지 계산해 보세요!</p>
+    </header>
+    <div class="game"><div class="field" id="field"></div></div>
+  </main>
+
+  <script>
+    // 앞줄/뒷줄에 겹치게 배치 + 좌우로 움직이는 범위
+    const LAYOUT = [
+      { x: 24, y: 51, vx: 0.16, minX: 18, maxX: 40 },
+      { x: 28, y: 51, vx: -0.12, minX: 20, maxX: 42 },
+      { x: 50, y: 50, vx: 0.1, minX: 44, maxX: 62 },
+      { x: 54, y: 50, vx: -0.18, minX: 46, maxX: 64 },
+      { x: 78, y: 51, vx: 0.14, minX: 70, maxX: 86 },
+      { x: 32, y: 62, vx: -0.2, minX: 24, maxX: 46 },
+      { x: 36, y: 62, vx: 0.22, minX: 26, maxX: 50 },
+      { x: 64, y: 62, vx: 0.17, minX: 56, maxX: 82 },
+      { x: 68, y: 62, vx: -0.15, minX: 58, maxX: 84 },
+    ];
+    const BALL_HOME = { x: 50, y: 94 };
+    const depthScale = (y) => 0.42 + ((y - 46) / 26) * 0.5;
+    const clampScale = (y) => Math.max(0.3, Math.min(1.25, depthScale(y)));
+    const makeKids = () => LAYOUT.map((p, i) => ({ ...p, id: i, img: i % 2 === 0 ? 'kid1.png' : 'kid2.png', out: false }));
+
+    const field = document.getElementById('field');
+    const S = { kids: makeKids(), ball: { ...BALL_HOME }, aim: null, phase: 'aim', outCount: 0, quiz: null, feedback: null, toast: null };
+    let toastTimer = null;
+
+    /* ---------- 그리기: 코트·친구·공은 한 번 만들고 위치만 바꿔요 ---------- */
+    field.innerHTML = `
+      <img class="court" src="court.jpg" alt="햇살 가득한 학교 운동장 피구 코트" draggable="false">
+      <div class="zone"></div>
+      ${S.kids.map((k) => `<img class="kid" data-kid="${k.id}" src="${k.img}" alt="상대편 친구" draggable="false">`).join('')}
+      <svg class="aim" viewBox="0 0 100 100" preserveAspectRatio="none"><line id="aim-line" stroke="#fff" stroke-width="0.6" stroke-dasharray="2 2" visibility="hidden"/></svg>
+      <img id="ball" src="ball.png" alt="피구공" draggable="false">
+      <div class="hud">
+        <div class="panel"><small>남은 친구</small><b id="alive"></b></div>
+        <div class="panel"><small>내가 아웃시킨 친구</small><b id="outs"></b></div>
+      </div>
+      <div id="layer"></div>`;
+    const kidEls = [...field.querySelectorAll('.kid')];
+    const ballEl = document.getElementById('ball');
+    const aimLine = document.getElementById('aim-line');
+    const layer = document.getElementById('layer');
+
+    function paintSprites() {
+      S.kids.forEach((k, i) => {
+        const s = depthScale(k.y);
+        const el = kidEls[i];
+        el.style.left = k.x + '%';
+        el.style.top = k.y + '%';
+        el.style.width = 11 * s + '%';
+        el.style.transform = `translate(-50%, -100%) scale(${k.out ? 0.4 : 1}) rotate(${k.out ? -75 : 0}deg)`;
+        el.style.opacity = k.out ? 0 : 1;
+      });
+      ballEl.style.cssText = `position:absolute;pointer-events:none;left:${S.ball.x}%;top:${S.ball.y}%;width:${13 * clampScale(S.ball.y)}%;transform:translate(-50%,-50%)`;
+      if (S.aim) {
+        aimLine.setAttribute('x1', BALL_HOME.x); aimLine.setAttribute('y1', BALL_HOME.y);
+        aimLine.setAttribute('x2', S.aim.x); aimLine.setAttribute('y2', S.aim.y);
+      }
+      aimLine.setAttribute('visibility', S.aim ? 'visible' : 'hidden');
+    }
+
+    function paintLayer() {
+      const alive = S.kids.filter((k) => !k.out);
+      document.getElementById('alive').textContent = alive.length + '명';
+      document.getElementById('outs').textContent = S.outCount + '명';
+      let html = '';
+      if (S.phase === 'aim') html += '<p class="tip">공을 잡고 던지고 싶은 방향으로 드래그하세요</p>';
+      if (S.toast) html += `<p class="toast panel">${S.toast}</p>`;
+      if (S.phase === 'quiz' && S.quiz) {
+        const n = S.quiz.hitIds.length;
+        html += `<div class="cover"><div class="panel">
+          <p class="lead">공이 ${n === 1 ? '명중' : n + '명에게 명중'}했어요!</p>
+          <h2>몇 명이 남았을까요?</h2>
+          <div class="lineup">${alive.map((k) => `<span class="${S.quiz.hitIds.includes(k.id) ? 'hit' : ''}"><img src="${k.img}" alt="${S.quiz.hitIds.includes(k.id) ? '아웃되는 친구' : '남는 친구'}"></span>`).join('')}</div>
+          <p class="note">✕ 표시된 ${n}명이 코트 밖으로 나가요</p>
+          <p class="sum">${S.quiz.before} − ${n} = ?</p>
+          <input class="answer" id="answer" inputmode="numeric" placeholder="?" aria-label="남은 친구 수" autocomplete="off">
+          ${S.feedback ? `<p class="wrong">${S.feedback}</p>` : ''}
+          <button class="btn" id="submit">정답 확인하고 공 받기</button>
+        </div></div>`;
+      }
+      if (S.phase === 'done') {
+        html += `<div class="cover"><div class="panel">
+          <h2>전부 아웃! 우리 팀 승리 🎉</h2>
+          <p class="note" style="font-size:15px">${S.outCount}명을 맞히고 계산도 모두 맞혔어요.</p>
+          <button class="btn" id="reset">다시 하기</button>
+        </div></div>`;
+      }
+      layer.innerHTML = html;
+      const input = document.getElementById('answer');
+      if (input) input.focus();
+    }
+
+    function setToast(msg) {
+      S.toast = msg;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { S.toast = null; paintLayer(); }, 1800);
+    }
+
+    /* ---------- 아이들이 좌우로 움직임 ---------- */
+    (function tick() {
+      if (S.phase === 'aim' || S.phase === 'fly') {
+        S.kids.forEach((k) => {
+          if (k.out) return;
+          k.x += k.vx;
+          if (k.x < k.minX) { k.x = k.minX; k.vx = -k.vx; }
+          else if (k.x > k.maxX) { k.x = k.maxX; k.vx = -k.vx; }
+        });
+        paintSprites();
+      }
+      requestAnimationFrame(tick);
+    })();
+
+    /* ---------- 공 던지기 ---------- */
+    function throwBall(dirX, dirY) {
+      const len = Math.hypot(dirX, dirY) || 1;
+      const speed = 1.55;
+      const vx = (dirX / len) * speed;
+      let vy = (dirY / len) * speed;
+      if (vy > -0.2) vy = -0.2;
+      let x = BALL_HOME.x, y = BALL_HOME.y;
+      S.phase = 'fly';
+      paintLayer();
+
+      const inBody = (k, px, py) => {
+        const ks = depthScale(k.y);
+        const halfW = 6.5 * ks;
+        return px > k.x - halfW && px < k.x + halfW && py < k.y + 2 && py > k.y - 26 * ks;
+      };
+
+      (function step() {
+        x += vx; y += vy;
+        S.ball = { x, y };
+        const s = clampScale(y);
+        const direct = S.kids.filter((k) => !k.out && inBody(k, x, y) && Math.abs(s - depthScale(k.y)) < 0.35);
+        // 겹쳐 서 있는 친구들은 공 하나로 함께 맞아요
+        const hits = direct.length
+          ? S.kids.filter((k) => !k.out && direct.some((d) =>
+              Math.abs(k.x - d.x) < 6.5 * (depthScale(k.y) + depthScale(d.y)) * 0.5 + 2 && Math.abs(k.y - d.y) < 6))
+          : [];
+
+        if (hits.length) {
+          S.quiz = { before: S.kids.filter((k) => !k.out).length, hitIds: hits.map((h) => h.id) };
+          S.feedback = null;
+          S.phase = 'quiz';
+          paintSprites();
+          return paintLayer();
+        }
+        if (y < 42 || x < -5 || x > 105) {
+          S.ball = { ...BALL_HOME };
+          S.phase = 'aim';
+          setToast('아쉽다! 빗나갔어요. 다시 던져볼까요?');
+          paintSprites();
+          return paintLayer();
+        }
+        requestAnimationFrame(step);
+      })();
+    }
+
+    const toPct = (e) => {
+      const r = field.getBoundingClientRect();
+      return { x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 };
+    };
+    field.addEventListener('pointerdown', (e) => {
+      if (S.phase !== 'aim') return;
+      S.aim = toPct(e);
+    });
+    field.addEventListener('pointermove', (e) => {
+      if (S.phase !== 'aim' || !S.aim) return;
+      S.aim = toPct(e);
+    });
+    const release = () => {
+      if (S.phase !== 'aim' || !S.aim) return;
+      const dx = S.aim.x - BALL_HOME.x, dy = S.aim.y - BALL_HOME.y;
+      S.aim = null;
+      if (Math.hypot(dx, dy) < 6) return;
+      throwBall(dx, dy);
+    };
+    field.addEventListener('pointerup', release);
+    field.addEventListener('pointercancel', () => { S.aim = null; });
+
+    /* ---------- 계산 문제 ---------- */
+    function submit() {
+      if (!S.quiz) return;
+      const input = document.getElementById('answer');
+      const n = S.quiz.hitIds.length;
+      const correct = S.quiz.before - n;
+      if (input.value !== '' && Number(input.value) === correct) {
+        S.kids.forEach((k) => { if (S.quiz.hitIds.includes(k.id)) k.out = true; });
+        S.outCount += n;
+        S.quiz = null;
+        S.ball = { ...BALL_HOME };
+        S.phase = correct === 0 ? 'done' : 'aim';
+        if (correct !== 0) setToast('정답! 공을 한 번 더 던질 수 있어요.');
+      } else {
+        S.feedback = '다시 세어볼까요? 아웃된 친구를 빼면 몇 명일까요?';
+      }
+      paintSprites();
+      paintLayer();
+    }
+
+    layer.addEventListener('click', (e) => {
+      if (e.target.id === 'submit') return submit();
+      if (e.target.id === 'reset') {
+        Object.assign(S, { kids: makeKids(), outCount: 0, ball: { ...BALL_HOME }, quiz: null, phase: 'aim' });
+        paintSprites();
+        paintLayer();
+      }
+    });
+    layer.addEventListener('input', (e) => {
+      if (e.target.id === 'answer') e.target.value = e.target.value.replace(/\D/g, '');
+    });
+    layer.addEventListener('keydown', (e) => {
+      if (e.target.id === 'answer' && e.key === 'Enter') submit();
+    });
+    // 문제 창 위를 누를 때 조준이 시작되지 않게 해요.
+    layer.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    paintSprites();
+    paintLayer();
+  </script>
+</body>
+</html>
