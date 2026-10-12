@@ -6,7 +6,7 @@
  *    공부하는 화면에는 버튼도 알림도 띄우지 않아요.
  *  - 채팅 탭: 지금 접속한 친구 목록 → [채팅하기]. 이미 이야기한 친구는 안 읽은 말의 수를 보여 줘요.
  *  - 채팅방: 새싹 챗봇이 이야기 주제를 추천해요. 추천일 뿐이라 하고 싶은 이야기를 자유롭게 해도 돼요.
- *    (지금은 준비해 둔 주제를 돌려 가며 보여 줘요. AI 챗봇을 붙일 때는 ChatBot.topic만 바꾸면 돼요.)
+ *    주제는 서버 함수(api/topics.js)가 Gemini에게 받아 와요. 실패하면 준비해 둔 주제를 보여 줘요.
  *
  * 아이 안전
  *  - 나쁜 말은 보내기 전에 가려요(CHAT_BAD_WORDS). AI 필터 · 신고 · 차단 · 인증코드는 베타 이후에 논의해요.
@@ -148,14 +148,60 @@ const ChatNet = {
 };
 
 /* ------------------------------ 새싹 챗봇 ------------------------------ */
+/**
+ * 추천 주제는 서버 함수(api/topics.js → Gemini)에서 여러 개를 한꺼번에 받아 돌려 써요.
+ * 서버가 없거나(내 컴퓨터에서 실행) 실패하면 준비해 둔 CHAT_TOPICS로 대신해요.
+ * 아이들이 나눈 대화는 서버로 보내지 않아요.
+ */
+const CHAT_TOPIC_CACHE = 'chageun-chat-topics';
+
 const ChatBot = {
+  list: CHAT_TOPICS,
   at: Math.floor(Math.random() * CHAT_TOPICS.length),
+  fromAi: false,
+  loading: false,
+
   topic() {
-    return CHAT_TOPICS[this.at % CHAT_TOPICS.length];
+    return this.list[this.at % this.list.length];
   },
+
   next() {
     this.at += 1;
+    // AI 주제를 한 바퀴 다 봤으면 새로 받아 와요.
+    if (this.fromAi && this.at % this.list.length === 0) this.load(true);
     return this.topic();
+  },
+
+  _use(topics) {
+    // 서버에서도 걸렀지만, 화면에 쓰기 전에 나쁜 말 목록으로 한 번 더 확인해요.
+    const ok = topics.filter((t) => typeof t === 'string' && t.length <= 40 && !chatClean(t).hit);
+    if (ok.length < 3) return;
+    this.list = ok;
+    this.at = 0;
+    this.fromAi = true;
+    const el = document.getElementById('chat-topic');
+    if (el) el.textContent = this.topic();
+  },
+
+  /** 채팅방에 들어올 때 불러요. 이 탭에서 이미 받았으면 다시 부르지 않아요. */
+  load(force) {
+    if (this.loading || (this.fromAi && !force)) return;
+    if (!force) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(CHAT_TOPIC_CACHE));
+        if (Array.isArray(saved) && saved.length) return this._use(saved);
+      } catch (e) { /* 저장된 것이 없으면 새로 받아요. */ }
+    }
+    this.loading = true;
+    fetch('api/topics')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (!d || !Array.isArray(d.topics)) return;
+        try { sessionStorage.setItem(CHAT_TOPIC_CACHE, JSON.stringify(d.topics)); } catch (e) { /* 저장 못 해도 괜찮아요. */ }
+        this._use(d.topics);
+      })
+      .catch(() => {}) // 준비해 둔 주제를 그대로 써요.
+      .then(() => (this.loading = false));
   },
 };
 
@@ -210,6 +256,7 @@ const Chat = {
     if (prev && (!this.me || prev.id !== this.me.id)) ChatNet.leave(prev.id);
     if (this.me) ChatNet.beat(this.me);
     if (screen === 'chatroom') {
+      ChatBot.load();
       this._markRead();
       this._scrollDown();
     }
