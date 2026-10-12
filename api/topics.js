@@ -10,6 +10,8 @@
  * ========================================================================= */
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+/** 모델이 붐벼서(429·500·503) 실패하면 차례로 다음 모델에게 물어봐요. */
+const MODELS = [...new Set([MODEL, 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite'])];
 const COUNT = 8;
 const MAX_LEN = 40;
 
@@ -46,28 +48,43 @@ module.exports = async (req, res) => {
   if (!key) return res.status(503).json({ error: 'no-key' });
 
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const ask = (model) =>
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(7000),
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: 'user', parts: [{ text: `대화 주제 ${COUNT + 4}개를 추천해 줘.` }] }],
         generationConfig: {
           temperature: 1,
-          maxOutputTokens: 800,
+          maxOutputTokens: 2000,
           responseMimeType: 'application/json',
           responseSchema: { type: 'ARRAY', items: { type: 'STRING' } },
         },
       }),
-    });
+      });
+
+    let r = null;
+    let used = MODEL;
+    for (const model of MODELS) {
+      used = model;
+      try {
+        r = await ask(model);
+      } catch (e) {
+        r = null; // 시간 초과 → 다음 모델
+        continue;
+      }
+      if (![429, 500, 503].includes(r.status)) break;
+    }
+    if (!r) return res.status(503).json({ error: 'timeout' });
     if (!r.ok) {
       // 원인을 바로 알 수 있게 Gemini가 돌려준 상태와 설명을 함께 알려 줘요. (키는 들어 있지 않아요.)
       const body = await r.text();
       let reason = '';
       try { reason = JSON.parse(body).error.message; } catch (e) { reason = body; }
-      console.error('gemini', r.status, body.slice(0, 300));
-      return res.status(503).json({ error: 'gemini', status: r.status, model: MODEL, reason: String(reason).slice(0, 200) });
+      console.error('gemini', used, r.status, body.slice(0, 300));
+      return res.status(503).json({ error: 'gemini', status: r.status, model: used, reason: String(reason).slice(0, 200) });
     }
     const data = await r.json();
     const text = (((data.candidates || [])[0] || {}).content || { parts: [] }).parts.map((p) => p.text || '').join('');
@@ -79,3 +96,6 @@ module.exports = async (req, res) => {
     return res.status(503).json({ error: 'failed' });
   }
 };
+
+// 모델 세 개를 차례로 물어볼 수 있게 실행 시간을 넉넉히 둬요.
+module.exports.config = { maxDuration: 30 };
