@@ -62,8 +62,12 @@ module.exports = async (req, res) => {
       }),
     });
     if (!r.ok) {
-      console.error('gemini', r.status, (await r.text()).slice(0, 300));
-      return res.status(503).json({ error: 'gemini' });
+      // 원인을 바로 알 수 있게 Gemini가 돌려준 상태와 설명을 함께 알려 줘요. (키는 들어 있지 않아요.)
+      const body = await r.text();
+      let reason = '';
+      try { reason = JSON.parse(body).error.message; } catch (e) { reason = body; }
+      console.error('gemini', r.status, body.slice(0, 300));
+      return res.status(503).json({ error: 'gemini', status: r.status, model: MODEL, reason: String(reason).slice(0, 200) });
     }
     const data = await r.json();
     const text = (((data.candidates || [])[0] || {}).content || { parts: [] }).parts.map((p) => p.text || '').join('');
