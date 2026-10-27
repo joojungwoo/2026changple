@@ -392,6 +392,18 @@ const Store = {
     this._write(db);
   },
 
+  /**
+   * 손풀이 과정 저장 (획 · 지운 횟수 · 멈춘 시간). 보호자 리포트에서 "어디서 막혔는지" 볼 때 써요.
+   * 학습 기록이 너무 커지지 않게 최근 30개만 남겨요.
+   */
+  saveInk(entry) {
+    const db = this._read();
+    if (!db.session) return;
+    const data = this._myData(db);
+    data.ink = [...(data.ink || []), entry].slice(-30);
+    this._write(db);
+  },
+
   getData() {
     const db = this._read();
     return db.session ? this._dataOf(db, db.session) : this._blankData();
@@ -430,6 +442,8 @@ const Store = {
     if (!data.studyDays.includes(today)) data.studyDays.push(today);
 
     // ----- 복습 스케줄 -----
+    // 친구 돕기(틀리는 친구)는 같은 문제를 한 번 더 보는 것이라 복습 스케줄을 바꾸지 않아요.
+    if (o.mode === 'friend') return this._write(db);
     const cur = data.srs[q.id];
     if (!correct) {
       // 틀린 문제 → 내일 복습. 그때까지 복습하지 않으면 식물이 시들어요.

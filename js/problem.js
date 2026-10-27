@@ -62,13 +62,15 @@ const Problem = {
     };
     for (const l of lines) {
       const m = l.match(/^\s*(\d+)\s*([+＋➕−\-×x÷])\s*(\d+)\s*=\s*(?:❓|\?|□)\s*$/);
-      if (m) return ok(Number(m[1]), m[2], Number(m[3]));
+      const found = m && ok(Number(m[1]), m[2], Number(m[3]));
+      if (found) return found;
     }
     // 세로셈: "  2 5\n+ 1 3"
     for (let i = 0; i + 1 < lines.length; i++) {
       const top = lines[i].match(/^\s*(\d(?:\s?\d)*)\s*$/);
       const bot = lines[i + 1].match(/^\s*([+＋−\-×x])\s*(\d(?:\s?\d)*)\s*$/);
-      if (top && bot) return ok(Number(top[1].replace(/\s/g, '')), bot[1], Number(bot[2].replace(/\s/g, '')));
+      const found = top && bot && ok(Number(top[1].replace(/\s/g, '')), bot[1], Number(bot[2].replace(/\s/g, '')));
+      if (found) return found;
     }
     return null;
   },
@@ -130,7 +132,62 @@ function whyWrong(p, res) {
   return fallback;
 }
 
+/* ------------------------------ 개념별 고정 색 ------------------------------ */
+/**
+ * 수를 자릿값 색으로: 일 ● 파랑 · 십 ■ 빨강 · 백 ▲ 초록 (css/tokens.css)
+ * 숫자 아래에 모양 표시가 붙어서 색을 구별하기 어려워도 자리를 알 수 있어요.
+ */
+const PV_NAME = { 1: '일', 10: '십', 100: '백' };
+function pvNum(n) {
+  const str = String(n);
+  if (!/^\d{1,3}$/.test(str)) return esc(str);
+  return `<span class="pv-num">${[...str]
+    .map((d, i) => {
+      const place = 10 ** (str.length - 1 - i);
+      return `<span class="pv pv-${place}" title="${PV_NAME[place]}의 자리">${d}</span>`;
+    })
+    .join('')}</span>`;
+}
+
+/** 한글 낱자 나누기: 초성 · 중성 · 종성(받침)을 고정 색 + 밑줄 모양으로 */
+const HG_CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+const HG_JUNG = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+const HG_JONG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+function hangulParts(ch) {
+  const code = ch.charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return null;
+  return { cho: HG_CHO[Math.floor(code / 588)], jung: HG_JUNG[Math.floor((code % 588) / 28)], jong: HG_JONG[code % 28] };
+}
+function hangulSplitHtml(word) {
+  return `<span class="hg-word">${[...word]
+    .map((ch) => {
+      const p = hangulParts(ch);
+      if (!p) return '';
+      return `<span class="hg-syl"><b>${ch}</b><span class="hg-jamo">
+          <i class="hg-cho" title="첫소리">${p.cho}</i><i class="hg-jung" title="가운데 소리">${p.jung}</i>${p.jong ? `<i class="hg-jong" title="받침">${p.jong}</i>` : ''}
+        </span></span>`;
+    })
+    .join('')}</span>`;
+}
+/** 낱자를 묻는 국어 문제: 그림 칸이 짧은 한글 낱말이고, 문장에 받침 · 자음 · 모음 · 소리가 나와요. */
+function hangulTarget(q) {
+  if (q.subject !== 'korean' || !/받침|자음|모음|소리|낱자|글자/.test(q.text || '')) return null;
+  const v = String(q.visual || '').trim();
+  if (/^[가-힣]{1,4}$/.test(v)) return v;
+  // 그림 칸이 비어 있거나 그림뿐이면, 문장에서 따옴표로 묻는 짧은 낱말을 나눠 보여 줘요.
+  const quoted = String(q.text || '').match(/["“'‘]([가-힣]{1,4})["”'’]/);
+  return quoted && !/[가-힣]{5,}/.test(v) ? quoted[1] : null;
+}
+
 /* ------------------------------ 표현 방식 ------------------------------ */
+/** 그림 칸이 식 하나(가로셈 한 줄 또는 세로셈 두 줄)뿐인지 */
+function mathOnlyVisual(q) {
+  const lines = String(q.visual || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return true;
+  if (lines.length === 1) return /^\d+\s*[+＋➕−\-×x÷]\s*\d+\s*=\s*(?:❓|\?|□)$/.test(lines[0]);
+  return lines.length === 2 && /^\d(?:\s?\d)*$/.test(lines[0]) && /^[+＋−\-×x]\s*\d(?:\s?\d)*$/.test(lines[1]);
+}
+
 /** 그림으로 나타낼 수 있는 덧셈 · 뺄셈 (너무 많으면 세기 어려워요) */
 const PICTURE_MAX = 20;
 const PICTURE_THINGS = ['🍎', '⭐', '🐟', '🎈', '🌷', '🍓'];
@@ -139,9 +196,24 @@ function repVisualHtml(q) {
   return q.visual ? `<div class="visual">${nl(q.visual)}</div>` : '';
 }
 
-function repTextHtml(q) {
+/** 단계 글에 정답이 들어 있는지 ("③ 답은 75" 같은 단계는 답을 확인한 뒤에 보여 줘요) */
+function stepGivesAnswer(p, step) {
+  if (p.answer.kind === 'number') return new RegExp(`(^|[^0-9])${p.answer.value}([^0-9]|$)`).test(step);
+  const ans = String(p.q.choices[p.q.answer]).replace(/\s+/g, '');
+  return ans.length >= 2 && step.replace(/\s+/g, '').includes(ans);
+}
+
+function repTextHtml(p, ctx) {
+  const q = p.q;
+  const shown = (s) => (ctx && ctx.checked) || !stepGivesAnswer(p, s);
   return `<p class="question-text" data-read>${nl(q.text)}</p>
-    ${q.steps ? `<ol class="steps">${q.steps.map((s) => `<li data-read>${esc(s)}</li>`).join('')}</ol>` : ''}`;
+    ${
+      q.steps
+        ? `<ol class="steps">${q.steps
+            .map((s) => (shown(s) ? `<li data-read>${esc(s)}</li>` : `<li class="step-hidden">${esc(s.match(/^[①②③④⑤]/) ? s[0] : '')} 이 단계는 직접 해 봐요 ✏️</li>`))
+            .join('')}</ol>`
+        : ''
+    }`;
 }
 
 const REPS = {
@@ -149,22 +221,25 @@ const REPS = {
     label: (p) => (p.subject === 'korean' ? '글자' : '숫자'),
     icon: (p) => (p.subject === 'korean' ? '📝' : '🔢'),
     supports: () => true,
-    render(p) {
+    render(p, ctx) {
       const q = p.q;
-      // 식이 있는 문제는 그림 대신 식을 크게 보여 줘요.
-      if (p.math) {
+      // 그림 칸이 식 하나뿐이면 자릿값 색을 입힌 식으로 크게 보여 줘요. (다른 내용이 있으면 그대로)
+      if (p.math && mathOnlyVisual(q)) {
         return `<div class="visual equation" aria-label="${p.math.a} ${PROBLEM_OP_SIGN[p.math.op]} ${p.math.b}">
-            ${p.math.a} ${PROBLEM_OP_SIGN[p.math.op]} ${p.math.b} = <span class="eq-blank">?</span>
-          </div>${repTextHtml(q)}`;
+            ${pvNum(p.math.a)} ${PROBLEM_OP_SIGN[p.math.op]} ${pvNum(p.math.b)} = <span class="eq-blank">?</span>
+          </div>${repTextHtml(p, ctx)}`;
       }
-      return repVisualHtml(q) + repTextHtml(q);
+      // 낱자 나누기는 정답이 될 수 있어서, 답을 확인한 뒤 풀이를 볼 때만 보여 줘요.
+      const word = ctx && ctx.checked ? hangulTarget(q) : null;
+      if (word) return `${String(q.visual || '').trim() === word ? '' : repVisualHtml(q)}<div class="visual hg-visual">${hangulSplitHtml(word)}</div>${repTextHtml(p, ctx)}`;
+      return repVisualHtml(q) + repTextHtml(p, ctx);
     },
   },
   pictures: {
     label: () => '그림',
     icon: () => '🍎',
     supports: (p) => p.subject === 'math' && (!!(p.math && ['+', '-'].includes(p.math.op) && Math.max(p.math.a, p.math.b) <= PICTURE_MAX) || /\p{Extended_Pictographic}/u.test(p.q.visual || '')),
-    render(p) {
+    render(p, ctx) {
       const q = p.q;
       const m = p.math;
       if (m && ['+', '-'].includes(m.op) && Math.max(m.a, m.b) <= PICTURE_MAX) {
@@ -174,26 +249,55 @@ const REPS = {
           m.op === '+'
             ? `${group(m.a)}<span class="pic-op">➕</span>${group(m.b)}`
             : `<span class="pic-group">${Array(m.a).fill(0).map((_, i) => `<i class="${i >= m.a - m.b ? 'gone' : ''}">${t}</i>`).join('')}</span>`;
-        return `<div class="visual pictures" aria-label="${m.a} ${PROBLEM_OP_SIGN[m.op]} ${m.b}">${body}</div>${repTextHtml(q)}`;
+        return `<div class="visual pictures" aria-label="${m.a} ${PROBLEM_OP_SIGN[m.op]} ${m.b}">${body}</div>${repTextHtml(p, ctx)}`;
       }
-      return repVisualHtml(q) + repTextHtml(q);
+      return repVisualHtml(q) + repTextHtml(p, ctx);
     },
   },
-  // 블록형(십 모형 · 일 모형)은 Phase 2에서 붙여요.
+  blocks: {
+    label: () => '블록',
+    icon: () => '🧱',
+    supports: (p) => p.subject === 'math' && !!p.math && ['+', '-'].includes(p.math.op) && p.math.a <= 999 && p.math.b <= 999,
+    render(p, ctx) {
+      const m = p.math;
+      return `<div class="visual blocks" role="img" aria-label="${m.a} ${PROBLEM_OP_SIGN[m.op]} ${m.b}을 수 모형으로 나타냈어요">
+          ${blocksHtml(m.a)}<span class="blk-op">${PROBLEM_OP_SIGN[m.op]}</span>${blocksHtml(m.b)}
+        </div>
+        <p class="pv-legend"><span class="pv pv-100">백</span> 백 모형 <span class="pv pv-10">십</span> 십 모형 <span class="pv pv-1">일</span> 일 모형</p>
+        ${repTextHtml(p, ctx)}`;
+    },
+  },
   listen: {
     label: () => '듣기',
     icon: () => '🎧',
     supports: () => true,
-    render(p) {
+    render(p, ctx) {
       return `<button type="button" class="listen-big" data-read-problem aria-label="문제 듣기">
           <span class="listen-ico" aria-hidden="true">🔊</span>
           <span>눌러서 문제 듣기</span>
         </button>
-        <details class="listen-text"><summary>글로 보기</summary>${repVisualHtml(p.q)}${repTextHtml(p.q)}</details>`;
+        <details class="listen-text"><summary>글로 보기</summary>${repVisualHtml(p.q)}${repTextHtml(p, ctx)}</details>`;
     },
   },
 };
 const REP_ORDER = ['numbers', 'pictures', 'blocks', 'listen'];
+
+/** 수 하나를 백 모형(▲ 판) · 십 모형(■ 막대) · 일 모형(● 낱개)으로 */
+function blocksHtml(n) {
+  const h = Math.floor(n / 100);
+  const t = Math.floor((n % 100) / 10);
+  const o = n % 10;
+  const many = (k, cls) => Array(k).fill(`<i class="${cls}"></i>`).join('');
+  return `<span class="blk-num">
+      <span class="blk-set">
+        ${h ? `<span class="blk-group">${many(h, 'blk blk-100')}</span>` : ''}
+        ${t ? `<span class="blk-group">${many(t, 'blk blk-10')}</span>` : ''}
+        ${o ? `<span class="blk-group ones">${many(o, 'blk blk-1')}</span>` : ''}
+        ${n === 0 ? '<span class="blk-zero">0</span>' : ''}
+      </span>
+      <span class="blk-label">${pvNum(n)}</span>
+    </span>`;
+}
 
 /** 이 문제에서 쓸 수 있는 표현 방식 */
 function repsFor(p) {
@@ -213,9 +317,9 @@ const INPUTS = {
   numpad: {
     supports: (p) => p.answer.kind === 'number' && p.answer.value >= 0 && p.answer.value < 100000,
   },
-  // 손글씨는 Phase 2에서 붙여요. 그때까지는 숫자패드로 넘어가요.
+  // 손글씨: 답의 자리 수만큼 칸을 보여 주고 한 칸에 숫자 하나씩 써요. (세 자리까지)
   pencil: {
-    supports: () => false,
+    supports: (p) => p.answer.kind === 'number' && p.answer.value >= 0 && p.answer.value < 1000,
   },
 };
 /** 원하는 입력이 안 되는 문제면 차례로 넘어가요: 손글씨 → 숫자패드 → 터치 선택 */

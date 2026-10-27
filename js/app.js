@@ -513,8 +513,12 @@ function screenLesson() {
     </div>`;
   const others = ch.concept.cards.map((c, i) => (i === s.idx ? '' : card(c, i))).join('');
 
+  // 그림 띠: 개념 보기 → 문제 풀기 → (친구 돕기) → 끝
+  const m = Profile.mode();
+  const plan = sessionPlan('sub', { focus: !!m.focus, concept: true, friend: !m.focus && s.questions.some((q) => Friend.attempt(Problem.from(q))) });
   return `
     ${hud({ back: 'unit', title: `${s.no} ${esc(s.title)}` })}
+    ${scheduleStrip(plan)}
     <main class="page">
       <section class="concept-hero ${subject.theme}">
         <div class="concept-emoji">${ch.icon}</div>
@@ -547,6 +551,11 @@ function startQuiz(mode, questions, opts) {
     const solved = new Set(Store.getData().records.map((r) => r.qid));
     list = [...list.filter((q) => !solved.has(q.id)), ...list.filter((q) => solved.has(q.id))].slice(0, FOCUS_COUNT);
   }
+  // 틀리는 친구: 계산 문제가 있으면 끝에 '친구 돕기' 한 문제를 붙여요. (집중 모드 · MAX는 빼요)
+  const friend = !m.focus && mode !== 'max' ? Friend.pick(list) : null;
+  if (friend) list = [...list, friend];
+  // 그림 띠의 단계: 개념을 보고 왔는지, 친구 돕기가 있는지에 따라 달라요.
+  const plan = sessionPlan(mode, { focus: !!m.focus, concept: State.screen === 'lesson', friend: !!friend });
   go('quiz', {
     chapterId: o.chapterId,
     quiz: {
@@ -556,6 +565,7 @@ function startQuiz(mode, questions, opts) {
       sub: o.sub !== undefined ? o.sub : null,
       backTo: o.backTo || 'unit',
       questions: list,
+      plan,
       index: 0,
       results: [],
       startedAt: Date.now(),
@@ -583,6 +593,11 @@ function freshQuestionState() {
     shownAt: Date.now(),
     readKey: null, // 소리 도움 모드: 이미 읽어 준 화면
     restAsked: false, // 단시간 집중 모드: "잠깐 쉴까?"를 물어봤는지
+    friendStage: 'look', // 친구 돕기: look 틀린 곳 찾기 → fix 바른 답 쓰기
+    friendSay: null,
+    friendOk: 0,
+    ink: null, // 손글씨 (pencil.js)
+    inkSave: null,
   };
 }
 
@@ -664,7 +679,7 @@ function inputNumpad(parts) {
   const label = { clear: '처음부터', back: '⌫ 지우기' };
   return `<div class="numpad">
     <div class="np-display ${q.checked ? 'done' : ''}" aria-live="polite">
-      <span class="np-value">${esc(shown) || '<span class="np-empty">?</span>'}</span>${unit}
+      <span class="np-value">${shown ? pvNum(shown) : '<span class="np-empty">?</span>'}</span>${unit}
       ${q.checked ? '<span class="np-mark">⭐ 정답</span>' : ''}
     </div>
     ${q.tries.length && !q.checked ? `<p class="np-tried">🤔 써 본 답: ${q.tries.map((t) => esc(responseText(p, t))).join(', ')}</p>` : ''}
@@ -685,10 +700,14 @@ function screenQuiz() {
   // MAX는 이미 배운 내용을 확인하는 시험이라 힌트를 숨겨요.
   const hintAllowed = q.mode !== 'max' && !!item.hint;
   const answerText = p.answer.kind === 'number' ? `${p.answer.value}${p.answer.unit}` : item.choices[item.answer];
-  const ready = !!quizResponse(parts);
+  const ready = input === 'pencil' ? !!(q.ink && q.ink.strokes.length) && !q.ink.reading : !!quizResponse(parts);
+  const readyLabel = input === 'pencil' ? '다 썼어요!' : '답 고르기 완료!';
+  const waitLabel = input === 'choice' ? '답을 골라 주세요' : '답을 써 주세요';
 
+  const friendLook = item.friend && !q.checked && q.friendStage === 'look';
   let help = '';
-  if (q.why && !q.checked) help = `<div class="hint-box why" role="status"><span class="hint-icon" aria-hidden="true">🤔</span><p data-read>${esc(q.why)}</p></div>`;
+  if (item.friend && !q.checked) help = friendLook ? friendLookHtml(parts) : friendFixHtml(parts);
+  else if (q.why && !q.checked) help = `<div class="hint-box why" role="status"><span class="hint-icon" aria-hidden="true">🤔</span><p data-read>${esc(q.why)}</p></div>`;
   else if (hintAllowed && !q.checked) {
     help = q.hintOpen
       ? `<div class="hint-box"><span class="hint-icon" aria-hidden="true">💡</span><p data-read>${nl(item.hint)}</p></div>`
@@ -697,7 +716,8 @@ function screenQuiz() {
 
   let feedback = '';
   if (q.checked) {
-    const head = q.correct ? (q.tries.length ? '🎉 이번에는 맞혔어요!' : '🎉 정답이에요!') : '💪 괜찮아요, 같이 봐요';
+    let head = q.correct ? (q.tries.length ? '🎉 이번에는 맞혔어요!' : '🎉 정답이에요!') : '💪 괜찮아요, 같이 봐요';
+    if (item.friend) head = q.correct ? `${friendAvatar('happy')} 고마워! 이제 알겠다! 🎉` : `${friendAvatar('think')} 우리 같이 다시 보자!`;
     feedback = `<section class="feedback ${q.correct ? '' : 'no'}">
         <div class="fb-head">${head}</div>
         ${q.correct ? '' : `<p class="fb-answer">⭐ 정답은 <b>${nl(answerText)}</b></p>`}
@@ -715,22 +735,25 @@ function screenQuiz() {
         <button class="round-btn" data-back="${q.backTo}" aria-label="그만하고 돌아가기">‹</button>
         ${quizCells(q)}
       </header>
+      ${scheduleStrip(q.plan)}
       <p class="quiz-title">${quizTitle(q)} · ${q.index + 1} / ${total}</p>
       ${repToggle(p, rep)}
 
       <div class="quiz-body">
         <section class="question-card quiz-problem rep-${rep}">
-          ${REPS[rep].render(p)}
+          ${REPS[rep].render(p, { checked: q.checked })}
         </section>
 
         <main class="scene-ground quiz-work">
           ${help}
-          ${input === 'numpad' ? inputNumpad(parts) : inputChoice(parts)}
+          ${friendLook ? '' : input === 'pencil' ? inputPencil(parts) : input === 'numpad' ? inputNumpad(parts) : inputChoice(parts)}
           ${feedback}
           ${
-            q.checked
+            friendLook
+              ? ''
+              : q.checked
               ? `<button class="btn btn-primary btn-lg btn-block" data-next>${q.index + 1 < total ? '다음 문제 →' : '마치기 🎉'}</button>`
-              : `<button class="btn btn-primary btn-lg btn-block" data-submit ${ready ? '' : 'disabled'}>${ready ? '답 고르기 완료!' : input === 'numpad' ? '답을 써 주세요' : '답을 골라 주세요'}</button>`
+              : `<button class="btn btn-primary btn-lg btn-block" data-submit ${ready ? '' : 'disabled'}>${ready ? readyLabel : waitLabel}</button>`
           }
         </main>
       </div>
@@ -765,10 +788,14 @@ function submitAnswer() {
   const correct = judge(p, res);
   const first = q.tries.length === 0;
   if (first) {
-    const rec = { mode: q.mode, hint: q.hintUsed, sess: q.sess, rep, input, ms: Date.now() - q.shownAt };
+    const rec = { mode: item.friend ? 'friend' : q.mode, hint: q.hintUsed, sess: q.sess, rep, input, ms: Date.now() - q.shownAt };
     const saved = safely(() => Store.recordAnswer(item, correct, rec));
     if (!saved.ok) return; // 저장 실패 시 진행하지 않음
     q.results.push({ qid: item.id, correct });
+  }
+  if (q.inkSave) {
+    safely(() => Store.saveInk({ qid: item.id, at: Date.now(), correct, first, ...q.inkSave }));
+    q.inkSave = null;
   }
 
   if (!correct && first && q.mode !== 'max') {
@@ -776,6 +803,7 @@ function submitAnswer() {
     q.why = whyWrong(p, res);
     q.selected = null;
     q.typed = '';
+    if (q.ink) q.ink = { ...freshInk(), penSeen: q.ink.penSeen };
     return render();
   }
   q.checked = true;
@@ -803,6 +831,7 @@ function nextQuestion() {
 function screenRest() {
   return `
     <div class="scene rest-scene">
+      ${scheduleStrip(State.quiz.plan)}
       <main class="rest-card">
         <div class="rest-buddy" aria-hidden="true">${sproutLogo()}</div>
         <h1>잘했어요! 잠깐 쉬어요 🌿</h1>
@@ -829,6 +858,7 @@ function readProblem() {
 
 function afterQuizRender() {
   if (State.screen !== 'quiz') return;
+  Pencil.mount();
   const q = State.quiz;
   const key = `${q.index}:${q.tries.length}:${q.checked}`;
   if (!Profile.mode().autoRead || q.readKey === key) return;
@@ -910,6 +940,7 @@ function screenResult() {
   }
 
   return `
+    ${q.plan ? scheduleStrip(q.plan) : ''}
     <main class="page flush result">
       <span class="confetti" style="top:12px;left:26px">🎊</span>
       <span class="confetti" style="top:30px;right:34px">✨</span>
@@ -1385,7 +1416,7 @@ app.addEventListener('click', async (ev) => {
     return render();
   }
 
-  if (el.hasAttribute('data-submit')) return submitAnswer();
+  if (el.hasAttribute('data-submit')) return State.quiz && quizParts().input === 'pencil' ? pencilSubmit() : submitAnswer();
   if (el.hasAttribute('data-next')) return nextQuestion();
 });
 

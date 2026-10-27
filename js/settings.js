@@ -11,7 +11,7 @@ const SETTINGS_HOLD_MS = 3000;
 /** 고를 수 있는 값 [값, 이름] */
 const SETTING_CHOICES = {
   grade: [[1, '1학년'], [2, '2학년'], [3, '3학년']],
-  rep: [['numbers', '🔢 숫자'], ['pictures', '🍎 그림'], ['listen', '🎧 듣기']],
+  rep: [['numbers', '🔢 숫자'], ['pictures', '🍎 그림'], ['blocks', '🧱 블록'], ['listen', '🎧 듣기']],
   font: [['m', '보통'], ['l', '크게'], ['xl', '아주 크게']],
   ttsRate: [['slow', '느리게'], ['normal', '보통'], ['fast', '빠르게']],
   layout: [['auto', '자동'], ['portrait', '세로'], ['landscape', '가로']],
