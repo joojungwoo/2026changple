@@ -1302,3 +1302,169 @@ svg.px { image-rendering: pixelated; }
   .plot-plant { width: 80px; height: 80px; }
   .plot-title { font-size: 14px; }
 }
+
+/* =======================================================================
+ * 느린학습자 공통 원칙 (작업 지시서)
+ *  - 터치 영역 최소 56px, 본문 글자 최소 20px
+ *  - 오답은 빨간색 · ✗ 대신 차분한 색 + 🤔 + 도움말
+ *  - 문제 풀이 화면에는 장식 애니메이션이 없어요.
+ * ===================================================================== */
+:root { --fs: 1; }
+body[data-font="l"] { --fs: 1.15; }
+body[data-font="xl"] { --fs: 1.32; }
+
+.icon-btn, .round-btn { min-width: 56px; min-height: 56px; }
+.round-btn { width: 56px; height: 56px; }
+.btn, .btn-ghost { min-height: 56px; }
+.btn-hint { min-height: 56px; font-size: calc(20px * var(--fs)); }
+.question-text { font-size: calc(23px * var(--fs)); }
+.steps li, .hint-box p, .fb-body p, .fb-answer { font-size: calc(20px * var(--fs)); }
+.choice { min-height: 64px; font-size: calc(21px * var(--fs)); }
+.visual { font-size: calc(30px * var(--fs)); }
+
+/* 다시 고르는 보기: 빨간색 대신 흐린 점선 + 🤔 (색만으로 알리지 않아요) */
+.choice.tried { background: #f1ede2; border-style: dashed; border-color: var(--ink-soft); color: var(--ink-soft); opacity: .8; }
+.choice.correct { border-width: 5px; }
+.choice-mark { font-family: var(--font-head); font-size: 17px; white-space: nowrap; }
+.feedback.no { background: var(--gold-soft); }
+.fb-answer { margin: 8px 0 0; }
+.fb-answer b { font-family: var(--font-head); font-weight: 400; }
+.hint-box.why { background: #eef5ff; border-color: var(--ink); }
+
+/* 읽어 주는 중인 부분 */
+.reading { outline: 4px solid var(--gold-deep); outline-offset: 3px; background-color: var(--gold-soft) !important; }
+
+/* ---------- 문제 화면: 문제 | 풀이 ---------- */
+.quiz-body { flex: 1; display: grid; grid-template-rows: auto 1fr; }
+.quiz-problem { margin: 0 16px 14px; }
+.quiz-work { padding-bottom: calc(26px + env(safe-area-inset-bottom)); }
+.quiz-title { font-size: calc(18px * var(--fs)); }
+
+/* iPad 세로 · 큰 화면: 가운데 넓게 */
+@media (min-width: 700px) {
+  #app { max-width: 760px; }
+}
+/* 가로 배치: 왼쪽 문제, 오른쪽 풀이 (자동이면 기기가 가로일 때, 가로를 고르면 늘) */
+#app.wide.screen-quiz { max-width: 1366px; }
+#app.wide .quiz-body {
+  grid-template-rows: none; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start; gap: 0;
+}
+#app.wide .quiz-problem { margin: 0 12px 16px 16px; position: sticky; top: 12px; }
+#app.wide .quiz-work { min-height: 100%; border-top: none; border-left: 4px solid var(--px-grass-deep); }
+.screen-quiz { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+.scene-top { padding-top: calc(14px + env(safe-area-inset-top)); }
+
+/* ---------- 보는 방법 바꾸기 ---------- */
+.rep-toggle { display: flex; gap: 8px; justify-content: center; margin: 0 16px 12px; flex-wrap: wrap; }
+.rep-toggle button {
+  min-height: 56px; min-width: 96px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  border: 3px solid var(--px-ink); background: var(--px-cream); color: var(--px-ink); font-family: var(--font-head); font-size: 19px;
+  box-shadow: 0 4px 0 var(--px-ink);
+}
+.rep-toggle button.on { background: #fff; border-width: 4px; text-decoration: underline; text-underline-offset: 5px; }
+.rep-toggle button.on::before { content: '✔'; }
+
+.visual.equation { font-family: var(--font-head); font-size: calc(40px * var(--fs)); letter-spacing: 4px; background: #fff; }
+.eq-blank { display: inline-block; min-width: 1.2em; border: 3px dashed var(--ink); padding: 0 6px; }
+.visual.pictures { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 14px; }
+.pic-group { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 280px; justify-content: center; padding: 6px; border: 2px solid var(--ink); background: #fff; }
+.pic-group i { font-style: normal; }
+.pic-group i.gone { opacity: .3; text-decoration: line-through; }
+.pic-op { font-size: .8em; }
+.listen-big {
+  width: 100%; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  border: var(--stroke); border-bottom-width: 6px; background: #fff; font-family: var(--font-head); font-size: calc(22px * var(--fs));
+}
+.listen-ico { font-size: 52px; line-height: 1; }
+.listen-text { margin-top: 12px; }
+.listen-text summary { min-height: 56px; display: flex; align-items: center; font-size: 20px; cursor: pointer; }
+
+/* ---------- 숫자패드 ---------- */
+.numpad { display: grid; gap: 12px; }
+.np-display {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 84px;
+  border: var(--stroke); border-bottom-width: 6px; background: #fff; font-family: var(--font-head); font-size: calc(44px * var(--fs));
+}
+.np-display.done { background: var(--ok-soft); border-color: var(--ok); }
+.np-empty { color: #c4b89a; }
+.np-unit { font-size: .6em; }
+.np-mark { font-size: 18px; }
+.np-tried { margin: 0; font-size: 20px; text-align: center; }
+.np-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.np-key {
+  min-height: 64px; border: 3px solid var(--px-ink); background: var(--px-cream); color: var(--px-ink);
+  font-family: var(--font-head); font-size: 30px; box-shadow: 0 5px 0 var(--px-ink);
+}
+.np-key.fn { font-size: 18px; }
+.np-key:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--px-ink); }
+
+/* ---------- 쉬는 화면 ---------- */
+.rest-scene { justify-content: center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); }
+.rest-card { margin: 0 auto; max-width: 460px; text-align: center; background: var(--px-cream); border: 4px solid var(--px-ink); box-shadow: 0 6px 0 var(--px-ink); padding: 24px 20px; display: grid; gap: 12px; }
+.rest-card h1 { margin: 0; font-size: 26px; }
+.rest-card p { margin: 0; font-family: var(--font-body); font-size: 20px; }
+.rest-buddy svg { width: 120px; height: 120px; margin: 0 auto; display: block; animation: rest-breathe 4s ease-in-out infinite; }
+.rest-buddy.small svg { width: 72px; height: 72px; }
+@keyframes rest-breathe { 50% { transform: scale(1.08); } }
+
+/* ---------- 설정 들어가기: 3초 꾹 누르기 ---------- */
+.hold-btn { position: relative; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.hold-fill { position: absolute; left: 0; bottom: 0; width: 100%; height: 0; background: rgba(46, 158, 91, .45); pointer-events: none; }
+.hold-btn.holding .hold-fill { height: 100%; transition: height 3s linear; }
+
+.gate { display: grid; gap: 16px; align-content: start; }
+.gate-lead { margin: 8px 0 0; font-size: 20px; text-align: center; }
+.gate-form { display: grid; gap: 12px; justify-items: center; }
+.gate-q { font-family: var(--font-head); font-size: 40px; }
+.gate-form input { width: 160px; min-height: 72px; font-size: 40px; text-align: center; font-family: var(--font-head); border: var(--stroke); }
+
+/* ---------- 설정 ---------- */
+.settings { display: grid; gap: 14px; }
+.set-block { border: var(--stroke); border-bottom-width: 6px; background: #fff; padding: 14px; display: grid; gap: 10px; }
+.set-block h3 { margin: 0; font-size: 21px; }
+.set-block .set-help { margin: 0; font-size: 17px; color: var(--ink-soft); }
+.set-field { display: grid; gap: 6px; font-size: 20px; }
+.set-field input { min-height: 56px; font-size: 20px; padding: 0 12px; border: 3px solid var(--ink); font-family: inherit; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg button {
+  flex: 1 1 0; min-width: 90px; min-height: 56px; padding: 6px 10px;
+  border: 3px solid var(--ink); background: var(--surface); font-size: 19px; font-family: var(--font-head);
+}
+.seg button.on { background: var(--ok-soft); border-color: var(--ok); border-width: 4px; }
+.avatars { display: flex; flex-wrap: wrap; gap: 8px; }
+.avatar { width: 60px; height: 60px; font-size: 32px; border: 3px solid var(--ink); background: var(--surface); }
+.avatar.on { background: var(--ok-soft); border-color: var(--ok); border-width: 5px; }
+.mode-cards { display: grid; gap: 10px; }
+@media (min-width: 700px) { .mode-cards { grid-template-columns: 1fr 1fr; } }
+.mode-card {
+  display: flex; gap: 12px; align-items: center; text-align: left; min-height: 80px; padding: 10px 14px;
+  border: 3px solid var(--ink); background: var(--surface); font-family: inherit;
+}
+.mode-card.on { background: var(--ok-soft); border-color: var(--ok); border-width: 5px; }
+.mode-ico { font-size: 34px; }
+.mode-card b { display: block; font-family: var(--font-head); font-weight: 400; font-size: 20px; }
+.mode-card small { display: block; font-size: 16px; color: var(--ink-soft); line-height: 1.4; }
+.set-try { margin-top: 4px; }
+
+/* ---------- 움직이는 효과: 끄기 · 약하게 ---------- */
+body[data-anim="off"] *, body[data-anim="off"] *::before, body[data-anim="off"] *::after { animation: none !important; transition: none !important; }
+body[data-anim="low"] * { animation-iteration-count: 1 !important; }
+/* 문제 푸는 화면에는 장식 애니메이션이 없어요. (누를 때 눌리는 느낌만 남겨요) */
+.screen-quiz *, .screen-quiz *::before, .screen-quiz *::after { animation: none !important; }
+
+/* 문제 화면(.quiz-scene) 도트 디자인 위에 공통 원칙을 덮어써요. */
+.quiz-scene .btn-hint {
+  justify-self: stretch; width: 100%; min-height: 56px; padding: 6px 14px;
+  border: 3px solid var(--px-ink); background: #fff3c4; box-shadow: 0 4px 0 var(--px-ink);
+  text-decoration: none; font-family: var(--font-head); font-size: calc(20px * var(--fs));
+}
+.quiz-scene .hint-box.why { background: #e6f1ff; }
+.quiz-scene .choice-mark {
+  top: -14px; right: -6px; padding: 0 8px; font-size: 16px;
+  background: #fff; border: 2px solid var(--px-ink);
+}
+.quiz-scene .choice.tried { background: #e8e2d2; box-shadow: 0 2px 0 var(--px-ink); }
+.quiz-scene .choice.dim { opacity: .5; }
+#app.wide .quiz-scene .scene-ground { padding-top: 20px; }
+#app.wide .quiz-scene .question-card { margin: 0 12px 16px 16px; }

@@ -146,12 +146,17 @@ const Store = {
     if (!u) return null;
     const p = u.profile || {};
     const role = u.role === 'leader' ? 'leader' : 'student';
+    // 설정에서 고친 별명 · 학년 · 아바타 (학생의 학습 기록에 함께 저장돼요)
+    const pf = (role === 'student' && db.data[id] && db.data[id].profile) || {};
+    const grade = [1, 2, 3].includes(pf.grade) ? pf.grade : [1, 2, 3].includes(p.grade) ? p.grade : gradeFromBirth(u.birth);
     return {
       id,
       role,
       name: u.name || p.name || id,
+      nick: pf.nick || '',
+      avatar: pf.avatar || '',
       birth: u.birth || '',
-      grade: [1, 2, 3].includes(p.grade) ? p.grade : gradeFromBirth(u.birth),
+      grade,
       motion: !u.settings || u.settings.motion !== false,
       students: role === 'leader' ? (u.students || []).filter((s) => db.users[s]) : [],
     };
@@ -357,6 +362,7 @@ const Store = {
   /* ---------------- 학습 데이터 ---------------- */
   _dataOf(db, id) {
     const d = db.data[id] || this._blankData();
+    d.profile = d.profile || {};
     d.records = d.records || [];
     d.srs = d.srs || {};
     d.studyDays = d.studyDays || [];
@@ -367,6 +373,23 @@ const Store = {
   _myData(db) {
     db.data[db.session] = this._dataOf(db, db.session);
     return db.data[db.session];
+  },
+
+  /** 아이 프로필 · 학습 모드 (profile.js). 학생만 있어요. */
+  profile() {
+    const db = this._read();
+    const u = db.session && db.users[db.session];
+    if (!u || u.role === 'leader') return {};
+    return (db.data[db.session] && db.data[db.session].profile) || {};
+  },
+
+  setProfile(patch) {
+    const db = this._read();
+    const u = db.session && db.users[db.session];
+    if (!u || u.role === 'leader') throw new Error('학생 계정에서만 바꿀 수 있어요.');
+    const data = this._myData(db);
+    data.profile = { ...(data.profile || {}), ...patch };
+    this._write(db);
   },
 
   getData() {
@@ -397,6 +420,10 @@ const Store = {
       hint: o.hint ? 1 : 0,
       mode: o.mode,
       sess: o.sess,
+      // 어떤 모습으로 보고(rep) 어떻게 답했는지(input), 걸린 시간(ms) — 보호자 리포트 분석용
+      rep: o.rep,
+      input: o.input,
+      ms: o.ms,
       date: today,
       at: Date.now(),
     });
