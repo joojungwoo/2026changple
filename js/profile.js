@@ -16,7 +16,7 @@ const PROFILE_DEFAULTS = {
   ttsRate: 'normal', // 읽어 주기 속도: slow · normal · fast
   layout: 'auto', // 화면 배치: auto · portrait · landscape
   anim: 'normal', // 애니메이션: off · low · normal
-  animTheme: 'grass', // 스와이프 테마 (Phase 3)
+  animTheme: 'star', // 쓸어넘기기 테마
   mode: 'basic', // 학습 모드: basic · pencil · focus · sound
   focusMin: 6, // 단시간 집중 모드: 한 번에 공부하는 시간(분)
 };

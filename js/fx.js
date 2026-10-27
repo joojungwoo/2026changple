@@ -14,7 +14,7 @@
  * ========================================================================= */
 
 /** 효과가 동작하는 화면: 화면 전환 · 메뉴 · 보상 화면만 */
-const FX_SCREENS = ['intro', 'login', 'signup', 'home', 'garden', 'unit', 'games', 'chat', 'result', 'rest', 'settings'];
+const FX_SCREENS = ['intro', 'login', 'signup', 'home', 'unit', 'games', 'chat', 'result', 'rest', 'settings'];
 const FX_MAX_PARTS = 160;
 
 const FX = {
@@ -32,7 +32,9 @@ const FX = {
   lastSwipe: { vx: 0, t: 0 },
 
   theme() {
-    return (typeof Profile !== 'undefined' && Profile.get().animTheme) || 'grass';
+    // 예전 '풀밭' 테마(화면 아래 풀)는 없앴어요. 풀은 단원 길에서 스크롤할 때 움직여요(ui.js ScrollGrass).
+    const t = (typeof Profile !== 'undefined' && Profile.get().animTheme) || 'star';
+    return t === 'grass' ? 'star' : t;
   },
   level() {
     if (!motionAllowed()) return 0;
@@ -66,10 +68,14 @@ const FX = {
     this.onRender();
   },
 
+  /** 캔버스는 앱이 있는 곳에만 깔아요. (넓은 화면에서 앱 밖까지 풀이 나지 않게) */
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.w = window.innerWidth;
+    const app = document.getElementById('app').getBoundingClientRect();
+    this.ox = Math.max(0, app.left);
+    this.w = Math.min(window.innerWidth, app.width) || window.innerWidth;
     this.h = window.innerHeight;
+    Object.assign(this.canvas.style, { left: `${this.ox}px`, width: `${this.w}px` });
     this.canvas.width = Math.round(this.w * dpr);
     this.canvas.height = Math.round(this.h * dpr);
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -81,6 +87,8 @@ const FX = {
   onRender() {
     if (!this.canvas) return;
     this.canvas.style.display = this.active() ? 'block' : 'none';
+    const app = document.getElementById('app').getBoundingClientRect();
+    if (Math.abs(app.left - (this.ox || 0)) > 1 || Math.abs(Math.min(window.innerWidth, app.width) - this.w) > 1) return this.resize();
     if (!this.active()) {
       this.parts = [];
       this.curl.size = this.curl.target = 0;
@@ -91,6 +99,7 @@ const FX = {
 
   /* ---------------- 손가락 ---------------- */
   start(x, y, target) {
+    x -= this.ox || 0;
     // 글자 칸 · 손글씨 칸 위에서는 효과를 내지 않아요.
     if (!this.active() || (target && target.closest && target.closest('input, textarea, [data-pencil]'))) return (this.last = null);
     this.last = { x, y, t: performance.now() };
@@ -99,6 +108,7 @@ const FX = {
 
   move(x, y) {
     if (!this.last || !this.active()) return;
+    x -= this.ox || 0;
     const now = performance.now();
     const dt = Math.max(8, now - this.last.t);
     const vx = (x - this.last.x) / dt;

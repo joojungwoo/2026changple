@@ -29,7 +29,23 @@ const CHAT_MIN_GAP_MS = 1500;
 const CHAT_HEARTBEAT_MS = 8000;
 const CHAT_ONLINE_MS = 25000; // 이 시간 안에 신호가 온 친구 = 접속 중
 
-const CHAT_QUICK = ['안녕! 👋', '같이 공부하자!', '잘했어! 👍', '화이팅! 💪', '고마워 😊'];
+/**
+ * 피그마 채팅: 글자를 치지 않고 문구나 그림 하나를 골라 보내요. (아이 안전 · 쉬운 사용)
+ *  그림은 ':이름:' 글자로 저장하고(서버 · 다른 기기와 같아요), 보여 줄 때 픽셀 그림으로 바꿔요.
+ */
+const CHAT_PHRASES = ['같이 게임해요', '힘내요', '고마워요', '미안해요', '친구해요', '좋아요'];
+const CHAT_EMOJIS = [
+  { id: 'thumbs-up', label: '좋아요', src: 'assets/ui/emoji-thumbs-up.svg', w: 36, h: 36 },
+  { id: 'thumbs-down', label: '싫어요', src: 'assets/ui/emoji-thumbs-down.svg', w: 36, h: 36 },
+  { id: 'smile', label: '웃는 얼굴', src: 'assets/ui/emoji-smile.svg', w: 36, h: 33 },
+  { id: 'cry', label: '우는 얼굴', src: 'assets/ui/emoji-cry.svg', w: 36, h: 33 },
+  { id: 'heart', label: '하트', src: 'assets/ui/emoji-heart.svg', w: 33, h: 30 },
+];
+const CHAT_RULES_KEY = 'hangeoleum-chat-rules-until'; // "7일간 보지 않기"
+const chatEmoji = (text) => {
+  const m = /^:([a-z-]+):$/.exec(String(text || ''));
+  return m ? CHAT_EMOJIS.find((e) => e.id === m[1]) : null;
+};
 
 /** 새싹 챗봇이 추천하는 이야기 주제 */
 const CHAT_TOPICS = [
@@ -474,6 +490,12 @@ const Chat = {
 
   /** app.js render() 끝에서 불려요. */
   afterRender(screen) {
+    // 채팅방에 새로 들어오면: 주의 사항 팝업을 다시 보여 주고, 고른 것 · 패널은 비워요.
+    if (screen === 'chatroom' && this.screen !== 'chatroom') {
+      this._rulesSeen = false;
+      this.pick = null;
+      this.panel = false;
+    }
     const prev = this.me;
     this.me = this._me();
     this.screen = screen;
@@ -496,6 +518,7 @@ const Chat = {
   _scrollDown() {
     const list = document.getElementById('chat-list');
     if (list) list.scrollTop = list.scrollHeight;
+    if (this.screen === 'chatroom') window.scrollTo(0, document.documentElement.scrollHeight);
   },
 
   /** 채팅 탭 위 빨간 점만 다시 그려요. */
@@ -581,14 +604,16 @@ const Chat = {
     return name ? { id: State.chatWith, name, online: ChatNet.online().some((f) => f.id === State.chatWith) } : null;
   },
 
+  /** 말풍선 (피그마: 친구 = 크림색 왼쪽, 나 = 초록 오른쪽, 꼬리 달림) */
   _msgHtml(m) {
     const mine = m.from === this.me.id;
     const t = new Date(m.at);
     const time = `${t.getHours() < 12 ? '오전' : '오후'} ${((t.getHours() + 11) % 12) + 1}:${String(t.getMinutes()).padStart(2, '0')}`;
+    const e = chatEmoji(m.text);
+    const body = e ? `<img src="${e.src}" alt="${e.label}" width="${e.w}" height="${e.h}">` : `<span class="chat-text">${esc(m.text)}</span>`;
     return `<li class="chat-msg ${mine ? 'mine' : ''}" id="m-${esc(m.id)}">
-      <span class="chat-msg-body">
-        <span class="chat-name">${mine ? '나' : esc(m.name)}<time>${time}</time></span>
-        <span class="chat-text">${esc(m.text)}</span>
+      <span class="chat-bubble px px-badge ${mine ? 'px-mine' : 'px-surface'} ${e ? 'emoji' : ''}" title="${mine ? '나' : esc(m.name)} · ${time}">
+        ${body}<img class="tail" src="assets/ui/bubble-tail-${mine ? 'mine' : 'friend'}.svg" alt="" aria-hidden="true">
       </span>
     </li>`;
   },
@@ -603,44 +628,102 @@ const Chat = {
   },
 
   _onlineHtml(f) {
-    return f.online
-      ? `<span class="chat-online-label">🟢 ${esc(f.name)} 친구가 지금 함께 있어요</span>`
-      : `<span class="chat-online-none">😴 ${esc(f.name)} 친구가 지금은 없어요. 들어오면 이야기할 수 있어요.</span>`;
+    return f.online ? `🟢 지금 함께 있어요` : `😴 지금은 없어요`;
   },
 
   _paintOnline() {
     const el = document.getElementById('chat-online');
     const f = this._friend();
     if (!el || !f) return;
-    el.innerHTML = this._onlineHtml(f);
-    document.querySelectorAll('#chat-form input, #chat-form button, .chat-quick button').forEach((b) => (b.disabled = !f.online));
+    el.textContent = this._onlineHtml(f);
+    el.classList.toggle('off', !f.online);
+    const send = document.querySelector('[data-chat-send]');
+    if (send) send.disabled = !f.online || !this.pick;
+  },
+
+  // 고른 것 · 선택 패널 · 탭 (피그마 '문구 선택' · '이모지 선택' · '미리보기')
+  pick: null, // { kind: 'phrase' | 'emoji', value }
+  panel: false,
+  tab: 'phrase',
+
+  _rulesHidden() {
+    try {
+      return Number(localStorage.getItem(CHAT_RULES_KEY) || 0) > Date.now();
+    } catch (e) {
+      return false;
+    }
+  },
+
+  /** 들어올 때 팝업 (피그마 '채팅 주의 사항') */
+  _rulesHtml() {
+    const row = (icon, w, h, text, top) => `<div class="rule-row" style="top:${top}px"><img src="${icon}" alt="" aria-hidden="true" width="${w}" height="${h}"><p class="t-body">${text}</p></div>`;
+    return `<div class="f-popup chat-rules" role="dialog" aria-modal="true" aria-label="채팅 주의 사항">
+      <div class="f-scrim" aria-hidden="true"></div>
+      <div class="popup-panel px px-panel px-surface" style="top:218px;height:408px"></div>
+      ${row('assets/ui/emoji-heart.svg', 33, 30, '상대방의 기분을<br>생각해서 보내요', 266)}
+      ${row('assets/ui/icon-moon.svg', 30, 30, '늦은 시간 연락하지 않아요', 356)}
+      ${row('assets/ui/emoji-smile.svg', 36, 33, '친구와 함께<br>즐겁게 소통해요', 446)}
+      <button class="f-btn f-button px px-tile px-surface" data-chat-rules="week" style="left:45px;top:548px;width:168px">7일간 보지 않기</button>
+      <button class="f-btn f-button px px-tile px-primary" data-chat-rules="close" style="left:225px;top:548px;width:114px">닫기</button>
+      ${fPlate('채팅 주의 사항', 'popup-title', 'style="top:200px"')}
+    </div>`;
+  },
+
+  _fieldHtml() {
+    if (!this.pick) return '<span class="field-hint t-body">보낼 말을 골라요</span>';
+    if (this.pick.kind === 'emoji') {
+      const e = CHAT_EMOJIS.find((x) => x.id === this.pick.value);
+      return `<img src="${e.src}" alt="${e.label}" width="${e.w}" height="${e.h}">`;
+    }
+    return `<span class="t-body">${esc(this.pick.value)}</span>`;
+  },
+
+  _panelHtml() {
+    const tabBtn = (id, label) => `<button class="f-btn chat-tab px px-badge ${this.tab === id ? 'px-primary' : 'px-surface'}" data-chat-tab="${id}" aria-pressed="${this.tab === id}">${label}</button>`;
+    const sel = (kind, v) => this.pick && this.pick.kind === kind && this.pick.value === v;
+    const body =
+      this.tab === 'phrase'
+        ? `<div class="pick-grid phrases">${CHAT_PHRASES.map((p) => `<button class="f-btn pick px px-tile ${sel('phrase', p) ? 'px-mine' : 'px-white'}" data-chat-pick="phrase" data-value="${esc(p)}" aria-pressed="${sel('phrase', p)}"><span class="t-h2">${esc(p)}</span></button>`).join('')}</div>`
+        : `<div class="pick-grid emojis">${CHAT_EMOJIS.map((e) => `<button class="f-btn pick px px-tile ${sel('emoji', e.id) ? 'px-mine' : 'px-white'}" data-chat-pick="emoji" data-value="${e.id}" aria-pressed="${sel('emoji', e.id)}" aria-label="${e.label}"><img src="${e.src}" alt="" width="${Math.round(e.w * 4 / 3)}" height="${Math.round(e.h * 4 / 3)}"></button>`).join('')}</div>`;
+    return `<div class="chat-panel">
+      <div class="chat-tabs">${tabBtn('phrase', '문구')}${tabBtn('emoji', '그림')}</div>
+      ${body}
+    </div>`;
   },
 
   roomView() {
     this.me = this._me();
     const f = this._friend();
     const msgs = ChatNet.messages(chatRoom(this.me.id, f.id));
-    const dis = f.online ? '' : 'disabled';
+    const showRules = !this._rulesSeen && !this._rulesHidden();
     return `
-      ${hud({ back: 'chat', title: `💬 ${esc(f.name)}` })}
-      <div class="chat-online" id="chat-online">${this._onlineHtml(f)}</div>
-      <div class="chat-topic">
-        <span class="chat-bot" aria-hidden="true">${sproutLogo()}</span>
-        <p><b>새싹이의 추천 주제</b><span id="chat-topic">${esc(ChatBot.topic())}</span></p>
-        <button type="button" class="icon-btn" data-chat-topic aria-label="다른 주제 보기">🔄</button>
+      <div class="chat-sky" aria-hidden="true">
+        ${[[18, 168, 96], [258, 222, 72], [36, 396, 72], [270, 486, 96], [120, 640, 72]].map(([x, y, w]) => `<img src="assets/ui/cloud.svg" alt="" style="left:${x}px;top:${y}px;width:${w}px">`).join('')}
       </div>
-      <main class="page flush chat-page">
+      <div class="fixed-top chat-head"><div class="zoomed" style="height:150px">
+        ${fRound('data-back="chat" style="left:16px;top:57px"', UI_IMG.back, '뒤로 가기')}
+        <span class="chat-avatar px px-round px-surface" aria-hidden="true"><img src="assets/ui/sprout-purple.svg" alt="" width="42" height="30"></span>
+        ${fPlate(esc(f.name), 'chat-name-plate')}
+        <span class="chat-online ${f.online ? '' : 'off'}" id="chat-online">${this._onlineHtml(f)}</span>
+      </div></div>
+      <main class="chat-room">
+        <div class="chat-topic px px-plate px-surface">
+          <img src="${UI_IMG.logo}" alt="" aria-hidden="true" width="30" height="30">
+          <p><b>새싹이 추천</b> <span id="chat-topic">${esc(ChatBot.topic())}</span></p>
+          <button type="button" class="f-btn chat-topic-next" data-chat-topic aria-label="다른 주제 보기">🔄</button>
+        </div>
         <ol class="chat-list" id="chat-list" aria-live="polite">
-          ${msgs.length ? msgs.map((m) => this._msgHtml(m)).join('') : '<li class="chat-empty">아직 나눈 이야기가 없어요. 먼저 인사해 볼까요? 👋</li>'}
+          ${msgs.length ? msgs.map((m) => this._msgHtml(m)).join('') : '<li class="chat-empty t-body">아직 나눈 이야기가 없어요. 먼저 인사해 볼까요? 👋</li>'}
         </ol>
       </main>
-      <div class="chat-quick">
-        ${CHAT_QUICK.map((q) => `<button type="button" data-chat-quick="${esc(q)}" ${dis}>${esc(q)}</button>`).join('')}
-      </div>
-      <form id="chat-form" class="chat-form" autocomplete="off">
-        <input type="text" name="text" maxlength="${CHAT_MAX_LEN}" placeholder="친구에게 할 말" aria-label="보낼 말" ${dis} />
-        <button type="submit" class="btn btn-primary" ${dis}>보내기</button>
-      </form>`;
+      <div class="fixed-bottom chat-foot"><div class="zoomed">
+        <div class="chat-input">
+          <button class="f-btn chat-field px px-badge px-white" data-chat-open aria-label="보낼 말 고르기" aria-expanded="${this.panel}">${this._fieldHtml()}</button>
+          <button class="f-btn chat-send px px-plate px-primary" data-chat-send aria-label="보내기" ${f.online && this.pick ? '' : 'disabled'}><img src="assets/ui/icon-paper-plane.svg" alt="" width="33" height="24"></button>
+        </div>
+        ${this.panel ? this._panelHtml() : '<div class="chat-home-space"></div>'}
+      </div></div>
+      ${showRules ? `<div class="fixed-top" style="z-index:30;bottom:0"><div class="zoomed" style="height:844px">${this._rulesHtml()}</div></div>` : ''}`;
   },
 
   send(raw) {
@@ -686,8 +769,42 @@ const Chat = {
 
 /* ------------------------------ 이벤트 ------------------------------ */
 document.getElementById('app').addEventListener('click', (ev) => {
-  const q = ev.target.closest('[data-chat-quick]');
-  if (q && !q.disabled) return Chat.send(q.dataset.chatQuick);
+  if (State.screen === 'chatroom') {
+    const rules = ev.target.closest('[data-chat-rules]');
+    if (rules) {
+      if (rules.dataset.chatRules === 'week') {
+        try { localStorage.setItem(CHAT_RULES_KEY, String(Date.now() + 7 * 86400000)); } catch (e) { /* 이번만 닫아요. */ }
+      }
+      Chat._rulesSeen = true;
+      return render();
+    }
+    if (ev.target.closest('[data-chat-open]')) {
+      Chat.panel = !Chat.panel;
+      return render();
+    }
+    const tab = ev.target.closest('[data-chat-tab]');
+    if (tab) {
+      Chat.tab = tab.dataset.chatTab;
+      return render();
+    }
+    const pick = ev.target.closest('[data-chat-pick]');
+    if (pick) {
+      Chat.pick = { kind: pick.dataset.chatPick, value: pick.dataset.value };
+      render();
+      if (Profile.mode().tapRead) Speech.read([{ text: pick.dataset.chatPick === 'emoji' ? pick.getAttribute('aria-label') : pick.dataset.value }]);
+      return;
+    }
+    const send = ev.target.closest('[data-chat-send]');
+    if (send && !send.disabled && Chat.pick) {
+      const text = Chat.pick.kind === 'emoji' ? `:${Chat.pick.value}:` : Chat.pick.value;
+      if (Chat.send(text)) {
+        Chat.pick = null;
+        Chat.panel = false;
+        render();
+      }
+      return;
+    }
+  }
   if (ev.target.closest('[data-chat-topic]')) {
     const el = document.getElementById('chat-topic');
     if (el) el.textContent = ChatBot.next();
