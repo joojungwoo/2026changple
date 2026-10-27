@@ -12,9 +12,11 @@
  *  - 나쁜 말은 보내기 전에 가려요(CHAT_BAD_WORDS). AI 필터 · 신고 · 차단 · 인증코드는 베타 이후에 논의해요.
  *  - 한 번에 CHAT_MAX_LEN자, CHAT_MIN_GAP_MS마다 한 번만 보낼 수 있어요.
  *
- * 전송 방식
- *  - 지금은 서버 없이 같은 기기의 localStorage를 함께 써요(탭 두 개 = 친구 두 명).
- *  - 기기끼리 채팅하려면 ChatNet만 서버(웹소켓 등)로 바꾸면 돼요. 화면 코드는 그대로예요.
+ * 전송 방식 (ChatNet)
+ *  - 수파베이스가 연결되어 있으면(Cloud.on) ChatCloud: 메시지는 messages 표, 새 메시지는 Realtime,
+ *    접속 중인 친구는 Presence("online" 채널)로 주고받아요. 다른 기기 친구와도 이야기할 수 있어요.
+ *  - 연결 정보가 없으면 ChatLocal: 같은 기기의 localStorage를 함께 써요(탭 두 개 = 친구 두 명).
+ *  - 화면 코드(Chat)는 어느 쪽이든 똑같이 불러요.
  * ========================================================================= */
 
 const CHAT_MSG_KEY = 'chageun-chat-rooms-v2';
@@ -66,8 +68,8 @@ function chatClean(text) {
 /** 둘만의 방 이름 */
 const chatRoom = (a, b) => [a, b].sort().join('|');
 
-/* ------------------------------ 전송 계층 ------------------------------ */
-const ChatNet = {
+/* ------------------------------ 전송 계층: 이 기기 안 ------------------------------ */
+const ChatLocal = {
   _get(key, blank) {
     try {
       return JSON.parse(localStorage.getItem(key)) || blank;
@@ -95,6 +97,13 @@ const ChatNet = {
       const pair = room.split('|');
       if (pair.includes(me)) out[pair[0] === me ? pair[1] : pair[0]] = all[room];
     });
+    return out;
+  },
+
+  /** 이름을 아는 학생 { 아이디: 이름 } */
+  people() {
+    const out = {};
+    Store.allStudents().forEach((s) => (out[s.id] = s.name));
     return out;
   },
 
@@ -146,6 +155,222 @@ const ChatNet = {
     });
   },
 };
+
+/* ------------------------------ 전송 계층: 수파베이스 ------------------------------ */
+const ChatCloud = {
+  me: null, // 내 아이디
+  rooms: {}, // 방 → 메시지[]
+  reads: {}, // 방 → 마지막으로 읽은 시각(ms)
+  names: {}, // 이름을 아는 학생 { 아이디: 이름 }
+  onlineIds: [],
+  fns: [],
+  _inbox: null,
+  _pres: null,
+  _readTimers: {},
+
+  _emit(kind) {
+    this.fns.forEach((fn) => fn(kind));
+  },
+
+  /** 모르는 학생의 아이디 · 이름을 서버에서 알아 와요. (by: 'id' = uuid, 'login_id' = 아이디) */
+  async _learn(by, keys) {
+    const want = keys.filter((k) => k && (by === 'id' ? !Cloud.loginOf[k] : !this.names[k]));
+    if (!want.length) return;
+    const rows = await Cloud._q(Cloud.sb.from('profiles').select('id,login_id,name,role').in(by, [...new Set(want)]));
+    rows.forEach((p) => {
+      Cloud.uuidOf[p.login_id] = p.id;
+      Cloud.loginOf[p.id] = p.login_id;
+      if (p.role === 'student') this.names[p.login_id] = p.name;
+    });
+  },
+
+  _toMsg(row) {
+    const from = Cloud.loginOf[row.sender_id];
+    return { id: row.id, from, name: this.names[from] || from, text: row.text, at: Date.parse(row.created_at) };
+  },
+
+  _add(row) {
+    const other = Cloud.loginOf[row.sender_id === Cloud.uid ? row.recipient_id : row.sender_id];
+    if (!other || !this.me) return false;
+    const room = chatRoom(this.me, other);
+    const list = (this.rooms[room] = this.rooms[room] || []);
+    if (list.some((m) => m.id === row.id)) return false;
+    list.push(this._toMsg(row));
+    list.sort((a, b) => a.at - b.at);
+    if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP);
+    return true;
+  },
+
+  async _start(me) {
+    const sb = Cloud.sb;
+    const uid = Cloud.uid;
+    this.names[me.id] = me.name;
+    const [msgs, reads] = await Promise.all([
+      Cloud._q(
+        sb.from('messages').select('id,sender_id,recipient_id,text,created_at')
+          .or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
+          .order('created_at', { ascending: false })
+          .limit(500)
+      ),
+      Cloud._q(sb.from('chat_reads').select('friend_id,read_at')),
+    ]);
+    await this._learn('id', [...msgs.map((m) => m.sender_id), ...msgs.map((m) => m.recipient_id), ...reads.map((r) => r.friend_id)]);
+    if (this.me !== me.id) return; // 그 사이에 로그아웃했어요.
+    msgs.reverse().forEach((m) => this._add(m));
+    reads.forEach((r) => {
+      const f = Cloud.loginOf[r.friend_id];
+      if (f) this.reads[chatRoom(me.id, f)] = Date.parse(r.read_at);
+    });
+    this._emit('msg');
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session || this.me !== me.id) return;
+    await sb.realtime.setAuth(session.access_token);
+    if (this.me !== me.id) return;
+
+    // 나에게 온 새 메시지 (RLS 덕분에 내 것만 와요)
+    this._join(me, () =>
+      sb.channel(`inbox-${uid}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${uid}` }, async (p) => {
+        await this._learn('id', [p.new.sender_id]).catch(() => {});
+        if (this._add(p.new)) this._emit('msg');
+      })
+    , '_inbox');
+
+    // 접속 중인 친구. 이름은 Presence에 실린 것을 믿지 않고 서버의 프로필로 확인해요.
+    this._join(me, () => {
+      const ch = sb.channel('online', { config: { private: true, presence: { key: me.id } } });
+      return ch.on('presence', { event: 'sync' }, async () => {
+        if (this._pres !== ch) return;
+        const keys = Object.keys(ch.presenceState());
+        await this._learn('login_id', keys).catch(() => {});
+        this.onlineIds = keys.filter((k) => this.names[k]);
+        this._emit('presence');
+      });
+    }, '_pres', (ch) => ch.track({ at: Date.now() }));
+  },
+
+  /**
+   * 채널에 들어가요. 로그인 토큰이 바뀌는 순간과 겹치면 들어가다 멈출 때가 있어서,
+   * 10초 안에 못 들어가거나 끊기면 채널을 새로 만들어 다시 들어가요.
+   */
+  _join(me, make, slot, onJoin) {
+    const sb = Cloud.sb;
+    const ch = make();
+    this[slot] = ch;
+    let done = false;
+    const retry = () => {
+      if (done || this[slot] !== ch || this.me !== me.id) return;
+      done = true;
+      sb.removeChannel(ch);
+      this[slot] = null;
+      setTimeout(() => this.me === me.id && !this[slot] && this._join(me, make, slot, onJoin), 1500);
+    };
+    const timer = setTimeout(retry, 10000);
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        clearTimeout(timer);
+        if (onJoin && this[slot] === ch) onJoin(ch);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        clearTimeout(timer);
+        retry();
+      }
+    });
+    return ch;
+  },
+
+  _stop() {
+    if (this._inbox) Cloud.sb.removeChannel(this._inbox);
+    if (this._pres) Cloud.sb.removeChannel(this._pres);
+    this._inbox = this._pres = null;
+    this.me = null;
+    this.rooms = {};
+    this.reads = {};
+    this.onlineIds = [];
+  },
+
+  messages(room) {
+    return this.rooms[room] || [];
+  },
+
+  myRooms(me) {
+    const out = {};
+    Object.keys(this.rooms).forEach((room) => {
+      const pair = room.split('|');
+      if (pair.includes(me)) out[pair[0] === me ? pair[1] : pair[0]] = this.rooms[room];
+    });
+    return out;
+  },
+
+  people() {
+    return this.names;
+  },
+
+  /**
+   * 보내기: 화면에 먼저 보여 주고, 서버가 받으면 서버의 id · 시각으로 바꿔요. (msg를 그대로 고쳐요)
+   * @returns {Promise} 실패하면 메시지를 목록에서 빼고 오류를 던져요.
+   */
+  post(room, msg) {
+    const friend = room.split('|').find((id) => id !== this.me);
+    const rid = Cloud.uuidOf[friend];
+    if (!rid) throw new Error('친구를 찾지 못했어요.');
+    const list = (this.rooms[room] = this.rooms[room] || []);
+    list.push(msg);
+    return Cloud.sb
+      .from('messages')
+      .insert({ recipient_id: rid, text: msg.text })
+      .select('id,created_at')
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          list.splice(list.indexOf(msg), 1);
+          if (/too-fast/.test(error.message)) throw new Error('천천히 보내요 🐢');
+          throw cloudError(error, '메시지를 보내지 못했어요. 다시 해 볼까요?');
+        }
+        msg.id = data.id;
+        msg.at = Date.parse(data.created_at);
+        return msg;
+      });
+  },
+
+  beat(me) {
+    if (this.me === me.id || !Cloud.uid) return;
+    this._stop();
+    this.me = me.id;
+    this._start(me).catch((e) => console.warn('chat start', e && e.message));
+  },
+
+  leave(id) {
+    if (this.me === id) this._stop();
+  },
+
+  online() {
+    return this.onlineIds.map((id) => ({ id, name: this.names[id] }));
+  },
+
+  readAt(me, room) {
+    return this.reads[room] || 0;
+  },
+
+  /** 읽은 시각은 잠깐 모았다가 서버에 남겨요. (다른 기기에서도 빨간 점이 맞게) */
+  markRead(me, room, at) {
+    if (at <= (this.reads[room] || 0)) return;
+    this.reads[room] = at;
+    const friend = room.split('|').find((id) => id !== me);
+    const fid = Cloud.uuidOf[friend];
+    if (!fid) return;
+    clearTimeout(this._readTimers[room]);
+    this._readTimers[room] = setTimeout(() => {
+      Cloud.sb.from('chat_reads').upsert({ user_id: Cloud.uid, friend_id: fid, read_at: new Date(at).toISOString() })
+        .then(({ error }) => error && console.warn('chat read', error.message));
+    }, 1000);
+  },
+
+  listen(fn) {
+    this.fns.push(fn);
+  },
+};
+
+const ChatNet = Cloud.on ? ChatCloud : ChatLocal;
 
 /* ------------------------------ 새싹 챗봇 ------------------------------ */
 /**
@@ -235,8 +460,7 @@ const Chat = {
   friends() {
     const me = this.me;
     const rooms = ChatNet.myRooms(me.id);
-    const names = {};
-    Store.allStudents().forEach((s) => (names[s.id] = s.name));
+    const names = ChatNet.people();
     const online = new Set(ChatNet.online().map((f) => f.id).filter((id) => id !== me.id && names[id]));
     const rows = [...new Set([...online, ...Object.keys(rooms).filter((id) => names[id])])].map((id) => ({
       id,
@@ -264,8 +488,9 @@ const Chat = {
 
   _markRead() {
     const room = chatRoom(this.me.id, State.chatWith);
-    const msgs = ChatNet.messages(room);
-    if (msgs.length) ChatNet.markRead(this.me.id, room, msgs[msgs.length - 1].at);
+    // 안 읽은 수는 친구가 보낸 말만 세요. 그래서 친구가 보낸 마지막 말까지 읽었다고 남겨요.
+    const theirs = ChatNet.messages(room).filter((m) => m.from !== this.me.id);
+    if (theirs.length) ChatNet.markRead(this.me.id, room, theirs[theirs.length - 1].at);
   },
 
   _scrollDown() {
@@ -346,9 +571,14 @@ const Chat = {
   },
 
   /* ---------- 채팅방 ---------- */
+  /** 이야기할 수 있는 친구인지 (app.js 접근 제어) */
+  knows(id) {
+    return !!id && !!ChatNet.people()[id];
+  },
+
   _friend() {
-    const u = Store.allStudents().find((s) => s.id === State.chatWith);
-    return u ? { id: u.id, name: u.name, online: ChatNet.online().some((f) => f.id === u.id) } : null;
+    const name = ChatNet.people()[State.chatWith];
+    return name ? { id: State.chatWith, name, online: ChatNet.online().some((f) => f.id === State.chatWith) } : null;
   },
 
   _msgHtml(m) {
@@ -428,11 +658,27 @@ const Chat = {
     }
     const clean = chatClean(text);
     const msg = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, from: me.id, name: me.name, text: clean.text, at: Date.now() };
+    const tempId = msg.id;
     const res = safely(() => ChatNet.post(chatRoom(me.id, f.id), msg));
     if (!res.ok) return false;
     this.lastSentAt = msg.at;
     this._appendMessages([msg]);
-    this._markRead();
+    if (res.value && res.value.then) {
+      // 서버로 보내는 중: 받으면 서버의 id로 바꾸고, 실패하면 화면에서도 빼요.
+      res.value
+        .then(() => {
+          const el = document.getElementById(`m-${tempId}`);
+          if (el) el.id = `m-${msg.id}`;
+          if (this.screen === 'chatroom') this._markRead();
+        })
+        .catch((e) => {
+          const el = document.getElementById(`m-${tempId}`);
+          if (el) el.remove();
+          toast(e.message, 'error');
+        });
+    } else {
+      this._markRead();
+    }
     if (clean.hit) toast('친구가 속상할 수 있는 말은 가렸어요 🌷', 'error');
     return true;
   },

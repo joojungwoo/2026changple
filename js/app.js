@@ -96,6 +96,30 @@ function safely(fn) {
   }
 }
 
+/** 서버를 기다리는 저장 동작용 safely */
+async function safelyAsync(fn) {
+  try {
+    return { ok: true, value: await fn() };
+  } catch (e) {
+    toast(e.message || '문제가 생겼어요. 다시 시도해 주세요.', 'error');
+    return { ok: false, error: e };
+  }
+}
+
+/** 폼을 보내는 동안 버튼을 잠가요. (두 번 눌러도 한 번만 가요) */
+async function busy(form, fn) {
+  const btn = form.querySelector('[type="submit"]');
+  if (form.dataset.busy) return;
+  form.dataset.busy = '1';
+  if (btn) btn.disabled = true;
+  try {
+    return await fn();
+  } finally {
+    delete form.dataset.busy;
+    if (btn && btn.isConnected) btn.disabled = false;
+  }
+}
+
 /** 로그인한 뒤 첫 화면 */
 function homeOf(user) {
   return user.role === 'leader' ? 'leader' : 'home';
@@ -172,6 +196,8 @@ let splashTimer;
 function leaveSplash() {
   clearTimeout(splashTimer);
   if (State.screen !== 'splash') return;
+  // 서버에서 예전 로그인을 확인하는 중이면 끝날 때까지 기다려요.
+  if (!Cloud.restored) return Cloud.ready.then(() => ((Cloud.restored = true), safely(() => Store.syncGarden()), leaveSplash()));
   const user = Store.currentUser();
   if (!user) return go('login');
   go(homeOf(user), { grade: user.grade });
@@ -988,7 +1014,7 @@ function render() {
   if (State.screen === 'garden' && !State.subject) State.screen = 'home';
   if (['quiz', 'result'].includes(State.screen) && !State.quiz) State.screen = 'home';
   if (State.screen === 'play' && !GAMES.some((g) => g.id === State.gameId)) State.screen = 'games';
-  if (State.screen === 'chatroom' && !Store.allStudents().some((s) => s.id === State.chatWith)) State.screen = 'chat';
+  if (State.screen === 'chatroom' && !Chat.knows(State.chatWith)) State.screen = 'chat';
   if (user && user.role === 'student' && !State.grade) State.grade = user.grade;
 
   const views = {
@@ -1016,6 +1042,7 @@ function render() {
   app.className = `screen-${State.screen}`;
   Chat.afterRender(State.screen);
   Motion.afterRender(State.screen);
+  if (LEADER_SCREENS.includes(State.screen)) Cloud.refreshLeader(render);
 }
 
 /* ============================ 이벤트 처리 ============================ */
@@ -1023,7 +1050,7 @@ function currentChapter() {
   return CHAPTER_BY_ID[State.chapterId];
 }
 
-app.addEventListener('click', (ev) => {
+app.addEventListener('click', async (ev) => {
   // 팝업 바깥(어두운 배경)을 누르면 닫혀요.
   if (ev.target.hasAttribute && ev.target.hasAttribute('data-backdrop')) return setSheet(null);
 
@@ -1048,7 +1075,7 @@ app.addEventListener('click', (ev) => {
   }
 
   if (el.hasAttribute('data-logout')) {
-    safely(() => Store.logOut());
+    await safelyAsync(() => Store.logOut());
     return go('login', { grade: null, subject: null, quiz: null, studentId: null });
   }
 
@@ -1069,7 +1096,8 @@ app.addEventListener('click', (ev) => {
   }
   if (el.hasAttribute('data-remove-student')) {
     if (!confirm('이 학생을 내 학생 목록에서 뺄까요? 학습 기록은 지워지지 않아요.')) return;
-    safely(() => Store.removeStudent(State.studentId));
+    const res = await safelyAsync(() => Store.removeStudent(State.studentId));
+    if (!res.ok) return;
     return go('leader');
   }
   if (el.dataset.range) {
@@ -1131,15 +1159,17 @@ app.addEventListener('click', (ev) => {
   if (el.hasAttribute('data-next')) return nextQuestion();
 });
 
-app.addEventListener('change', (ev) => {
+app.addEventListener('change', async (ev) => {
   // 로그인 · 회원가입의 학생 / 지도자 탭 (다른 화면으로 가도 고른 쪽을 기억해요)
   if (ev.target.name === 'role') State.role = ev.target.value;
 
   // 지도자: 학생의 집중력 환기 기능 켜고 끄기
   if (ev.target.hasAttribute('data-motion-toggle')) {
     const on = ev.target.checked;
-    const res = safely(() => Store.setStudentMotion(State.studentId, on));
+    ev.target.disabled = true;
+    const res = await safelyAsync(() => Store.setStudentMotion(State.studentId, on));
     if (!res.ok) return render();
+    ev.target.disabled = false;
     toast(on ? '집중력 환기 기능을 켰어요.' : '집중력 환기 기능을 껐어요.');
   }
 });
@@ -1149,7 +1179,7 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && State.sheet) setSheet(null);
 });
 
-app.addEventListener('submit', (ev) => {
+app.addEventListener('submit', async (ev) => {
   const form = ev.target;
   ev.preventDefault();
   const fd = new FormData(form);
@@ -1162,45 +1192,50 @@ app.addEventListener('submit', (ev) => {
   }
 
   if (formId === 'login-form') {
-    try {
-      const user = Store.logIn(fd.get('role'), fd.get('id'), fd.get('password'), !!fd.get('keep'));
-      return go(homeOf(user), { grade: user.grade });
-    } catch (e) {
-      document.getElementById('login-error').textContent = e.message;
-      return;
-    }
+    return busy(form, async () => {
+      try {
+        const user = await Store.logIn(fd.get('role'), fd.get('id'), fd.get('password'), !!fd.get('keep'));
+        safely(() => Store.syncGarden());
+        go(homeOf(user), { grade: user.grade });
+      } catch (e) {
+        const el = document.getElementById('login-error');
+        if (el) el.textContent = e.message;
+      }
+    });
   }
 
   if (formId === 'signup-form') {
-    try {
-      const user = Store.signUp({
-        role: fd.get('role'),
-        name: fd.get('name'),
-        birth: fd.get('birth'),
-        id: fd.get('id'),
-        password: fd.get('password'),
-        password2: fd.get('password2'),
-        agree: !!fd.get('agree'),
-      });
-      toast(`${user.name}님, 반가워요!`);
-      return go(homeOf(user), { grade: user.grade });
-    } catch (e) {
-      document.getElementById('signup-error').textContent = e.message;
-      return;
-    }
+    return busy(form, async () => {
+      try {
+        const user = await Store.signUp({
+          role: fd.get('role'),
+          name: fd.get('name'),
+          birth: fd.get('birth'),
+          id: fd.get('id'),
+          password: fd.get('password'),
+          password2: fd.get('password2'),
+          agree: !!fd.get('agree'),
+        });
+        toast(`${user.name}님, 반가워요!`);
+        go(homeOf(user), { grade: user.grade });
+      } catch (e) {
+        const el = document.getElementById('signup-error');
+        if (el) el.textContent = e.message;
+      }
+    });
   }
 
   if (formId === 'add-student-form') {
-    const res = safely(() => Store.addStudent(fd.get('id')));
-    if (!res.ok) return;
+    const res = await busy(form, () => safelyAsync(() => Store.addStudent(fd.get('id'))));
+    if (!res || !res.ok) return;
     toast(`${res.value.name} 학생을 추가했어요.`);
     State.adding = false;
     return render();
   }
 
   if (formId === 'inquiry-form') {
-    const res = safely(() => Store.addInquiry(fd.get('text')));
-    if (!res.ok) return;
+    const res = await busy(form, () => safelyAsync(() => Store.addInquiry(fd.get('text'))));
+    if (!res || !res.ok) return;
     toast('문의를 남겼어요.');
     return render();
   }

@@ -1,6 +1,8 @@
 /* =========================================================================
  * store.js
- * localStorage 기반 데이터 저장소
+ * 데이터 저장소
+ *  - 수파베이스가 연결되어 있으면(Cloud.on, cloud.js) 서버에 저장하고, 여기서는 메모리 사본을 읽고 써요.
+ *    연결 정보가 없으면 예전처럼 이 기기의 localStorage에만 저장해요.
  *  - 계정: 학생 / 지도자(학부모·선생님). 지도자는 학생 아이디로 학생을 여러 명 맡아요.
  *  - 학습 기록(LearningRecord): 힌트 사용 여부까지 남겨 성과 리포트에 써요.
  *  - 복습 스케줄(SpacedRepetition): 복습할 때가 되면 텃밭 식물이 시들어요.
@@ -93,6 +95,12 @@ function tabSession(value) {
 const Store = {
   /* ---------------- 저수준 입출력 ---------------- */
   _read() {
+    if (Cloud.on) return Cloud.mem;
+    return this._readLocal();
+  },
+
+  /** 이 기기에 저장된 DB (수파베이스를 쓰기 전에 만든 계정도 여기 있어요) */
+  _readLocal() {
     let db;
     try {
       const raw = localStorage.getItem(DB_KEY);
@@ -113,6 +121,7 @@ const Store = {
   },
 
   _write(db) {
+    if (Cloud.on) return Cloud.save();
     const { remember, ...rest } = db;
     try {
       localStorage.setItem(DB_KEY, JSON.stringify({ ...rest, session: remember || null }));
@@ -153,7 +162,7 @@ const Store = {
    * 회원가입: 이름 · 생년월일 · 아이디 · 비밀번호 + 개인정보 동의
    * @param {{role, name, birth, id, password, password2, agree}} f
    */
-  signUp(f) {
+  async signUp(f) {
     const role = f.role === 'leader' ? 'leader' : 'student';
     const name = (f.name || '').trim().slice(0, 20);
     const id = (f.id || '').trim().toLowerCase();
@@ -166,6 +175,11 @@ const Store = {
     if (!f.password || f.password.length < 4) throw new Error('비밀번호는 4자 이상으로 정해 주세요.');
     if (f.password2 !== undefined && f.password !== f.password2) throw new Error('비밀번호가 서로 달라요. 다시 확인해 주세요.');
     if (!f.agree) throw new Error('개인정보 수집 · 이용에 동의해 주세요.');
+
+    if (Cloud.on) {
+      await Cloud.signUp({ id, role, name, birth, password: f.password });
+      return this._user(Cloud.mem, id);
+    }
 
     const db = this._read();
     if (db.users[id]) throw new Error('이미 쓰고 있는 아이디예요. 다른 아이디를 정해 주세요.');
@@ -184,8 +198,9 @@ const Store = {
   },
 
   /** 로그인: 학생 탭과 지도자 탭이 따로예요. 어떤 항목이 틀렸는지는 알려 주지 않아요. */
-  logIn(role, id, password, keep) {
+  async logIn(role, id, password, keep) {
     const key = (id || '').trim().toLowerCase();
+    if (Cloud.on) return this._cloudLogIn(role, key, password, keep);
     const db = this._read();
     const raw = db.users[key];
     const user = this._user(db, key);
@@ -197,7 +212,32 @@ const Store = {
     return user;
   },
 
+  /**
+   * 수파베이스 로그인. 서버에 없는 아이디지만 이 기기에 예전 계정이 있으면
+   * 그 계정으로 서버에 가입하고 학습 기록 · 맡은 학생을 옮겨 줘요.
+   */
+  async _cloudLogIn(role, key, password, keep) {
+    try {
+      const me = await Cloud.logIn(role, key, password, keep);
+      return this._user(Cloud.mem, me.id);
+    } catch (e) {
+      const local = this._readLocal();
+      const raw = local.users[key];
+      const old = raw && raw.password && raw.password === password ? this._user(local, key) : null;
+      if (!old || old.role !== role || !/맞지 않아요/.test(e.message)) throw e;
+      try {
+        await Cloud.signUp({ id: key, role, name: old.name, birth: old.birth, password });
+      } catch (e2) {
+        throw e; // 서버에 이미 같은 아이디가 있으면 원래 오류를 보여 줘요.
+      }
+      if (role === 'student') await Cloud.adoptData(this._dataOf(local, key));
+      else for (const sid of old.students) await Cloud.addStudent(sid).catch(() => {});
+      return this._user(Cloud.mem, key);
+    }
+  },
+
   logOut() {
+    if (Cloud.on) return Cloud.signOut();
     const db = this._read();
     this._setSession(db, null, false);
     this._write(db);
@@ -212,7 +252,7 @@ const Store = {
   allStudents() {
     const db = this._read();
     return Object.keys(db.users)
-      .filter((id) => db.users[id].password)
+      .filter((id) => db.users[id].password || db.users[id].cloud)
       .map((id) => this._user(db, id))
       .filter((u) => u.role === 'student');
   },
@@ -238,11 +278,12 @@ const Store = {
   },
 
   /** 학생 아이디로 내 학생 목록에 추가 */
-  addStudent(studentId) {
+  async addStudent(studentId) {
     const id = (studentId || '').trim().toLowerCase();
     if (!id) throw new Error('학생 아이디를 입력해 주세요.');
     const db = this._read();
     const me = this._leader(db);
+    if (Cloud.on) return this._user(db, await Cloud.addStudent(id));
     const s = this._user(db, id);
     if (!s || s.role !== 'student' || !db.users[id].password) throw new Error('그 아이디의 학생을 찾지 못했어요. 아이디를 다시 확인해 주세요.');
     if (me.students.includes(id)) throw new Error('이미 추가한 학생이에요.');
@@ -251,9 +292,10 @@ const Store = {
     return s;
   },
 
-  removeStudent(studentId) {
+  async removeStudent(studentId) {
     const db = this._read();
     const me = this._leader(db);
+    if (Cloud.on) return Cloud.removeStudent(studentId);
     me.students = me.students.filter((s) => s !== studentId);
     this._write(db);
   },
@@ -265,21 +307,23 @@ const Store = {
     return me && me.role === 'leader' && me.students.includes(studentId) ? this._user(db, studentId) : null;
   },
 
-  setStudentMotion(studentId, on) {
+  async setStudentMotion(studentId, on) {
     const db = this._read();
     const me = this._leader(db);
     if (!me.students.includes(studentId)) throw new Error('내 학생 목록에 없는 학생이에요.');
+    if (Cloud.on) return Cloud.setStudentMotion(studentId, on);
     const u = db.users[studentId];
     u.settings = { ...(u.settings || {}), motion: !!on };
     this._write(db);
   },
 
-  /** 문의하기: 서버가 없어서 지금은 이 기기에만 남겨 둬요. */
-  addInquiry(text) {
+  /** 문의하기: 수파베이스가 없으면 이 기기에만 남겨 둬요. */
+  async addInquiry(text) {
     const t = (text || '').trim().slice(0, 500);
     if (!t) throw new Error('문의할 내용을 적어 주세요.');
     const db = this._read();
     const me = this._leader(db);
+    if (Cloud.on) return Cloud.addInquiry(t);
     db.inquiries.push({ from: me.id || db.session, text: t, at: Date.now() });
     this._write(db);
   },

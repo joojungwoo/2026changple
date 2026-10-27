@@ -45,13 +45,30 @@ cd "/Users/lukejoo/Desktop/2026창플" && python3 -m http.server 8777
 | `js/curriculum.js` | 단원 데이터 + 문제은행 병합·정렬 + 소단원·MAX 세트 구성 |
 | `js/bank/*.js` | 학년·과목별 문제은행, `k1b.js`(국어 1-2 가 네 단원), `max-m1.js`(수학 1-1 교과서 MAX 문제) |
 | `js/subunits.js` | 문제별 소단원 번호 · 소단원 이름 보정 |
-| `js/store.js` | localStorage 저장소: 계정(학생/지도자), 학습 기록, 복습 스케줄, 텃밭 규칙, 성과 리포트 계산 |
-| `js/chat.js` | 친구와 1대1 채팅 (친구 목록 · 채팅방 · 새싹 챗봇 추천 주제) |
+| `js/config.js` | 수파베이스 주소 · 공개 키 (비어 있으면 이 기기 안에서만 동작) |
+| `js/cloud.js` | 수파베이스 연결: 로그인 · 학습 기록 올리기/받기 · 지도자 기능 |
+| `js/store.js` | 저장소: 계정(학생/지도자), 학습 기록, 복습 스케줄, 텃밭 규칙, 성과 리포트 계산 |
+| `js/chat.js` | 친구와 1대1 채팅 (친구 목록 · 채팅방 · 새싹 챗봇 추천 주제). 수파베이스 Realtime으로 기기끼리 주고받음 |
+| `supabase/schema.sql` | 수파베이스 표 · 보안 규칙(RLS) · 실시간 설정 |
 | `js/motion.js` | 5분 동안 터치가 없으면 새싹 친구가 운동 시간을 알려 줌 |
 | `js/app.js` | 화면 렌더링 및 흐름 제어 |
 | `games/` | 게임 탭에 들어가는 게임 (게임마다 폴더 하나, `index.html`로 실행) |
 
-백엔드 없이 브라우저 localStorage에 저장합니다. 빌드 도구·의존성 없음.
+빌드 도구 없음. 데이터는 **수파베이스**(계정 · 학습 기록 · 채팅)에 저장합니다. `js/config.js`가 비어 있으면 예전처럼 브라우저 localStorage에만 저장합니다.
+
+## 수파베이스 연결
+
+1. 대시보드 → **SQL Editor**에 `supabase/schema.sql` 전체를 붙여 넣고 **Run** (여러 번 실행해도 괜찮아요).
+2. **Authentication → Sign In / Providers → Email**: **Confirm email 끄기**.
+   아이디를 `아이디@hangeoleum.app` 모양의 가짜 이메일로 바꿔 가입하므로 메일을 받을 수 없어요.
+3. **Project Settings → API**에서 Project URL과 anon(publishable) 키를 `js/config.js`에 넣기.
+   service_role(secret) 키는 절대 넣지 마세요.
+
+- 화면 코드는 그대로 `Store`를 바로바로 불러요. 로그인할 때 서버에서 내 정보를 받아 메모리에 두고, 바뀌면 0.8초 모았다가 올립니다(`cloud.js`).
+- 학습 기록은 학생마다 JSON 하나(`learning_data`)입니다. 두 기기에서 동시에 공부하면 나중에 올린 쪽이 남습니다.
+- 지도자는 맡은 학생의 기록만 읽을 수 있고(RLS), 지도자 화면에 있으면 30초마다 새로 받습니다.
+- 수파베이스를 쓰기 전에 이 기기에서 만든 계정은 **같은 아이디 · 비밀번호로 처음 로그인할 때 서버로 옮겨집니다**(학습 기록 · 맡은 학생 포함).
+- 비밀번호는 수파베이스 최소 길이(6자)를 넘도록 앞에 `hg:`를 붙여 보냅니다. 아이들은 지금처럼 4자 이상이면 돼요.
 
 > 정적 자원은 `index.html`에서 `?v=N` 쿼리로 캐시를 무효화합니다. CSS/JS를 고친 뒤 화면이 그대로면 이 숫자를 올리세요.
 
@@ -168,8 +185,10 @@ cd "/Users/lukejoo/Desktop/2026창플" && python3 -m http.server 8777
   지금은 준비해 둔 주제 10개를 돌려 보여 줍니다. AI 챗봇을 붙일 때는 `ChatBot.topic`만 바꾸면 됩니다.
 - 나쁜 말 가리기는 예전의 단어 목록 방식만 남겼습니다. AI 필터, 인증코드, 신고·차단·관리자 기능은 베타 이후입니다.
 
-> **지금은 서버 없이 같은 기기 안에서만 동작해요.** 탭 두 개에서 서로 다른 학생으로 로그인하면 두 친구가 채팅하는 모습을 볼 수 있어요.
-> 기기끼리 채팅하려면 `chat.js`의 `ChatNet`만 서버(웹소켓·Firebase 등)로 바꾸면 돼요. 계정·학습 기록도 같은 이유로 기기마다 따로예요.
+- **전송**: 수파베이스가 연결되어 있으면 `ChatCloud` — 메시지는 `messages` 표, 새 메시지는 Realtime, 접속 중인 친구는 Presence(`online` 채널).
+  주고받은 두 사람만 읽을 수 있고, 학생끼리만, 자기 이름으로만, 1초에 한 번만 보낼 수 있어요(RLS · 트리거). 읽은 위치(`chat_reads`)도 서버에 남아 다른 기기에서도 빨간 점이 맞아요.
+- 연결 정보가 없으면 `ChatLocal` — 같은 기기의 탭끼리만 이야기할 수 있어요(개발용).
+- 한 기기에서 탭마다 다른 학생으로 로그인할 수 있어요(로그인 정보를 탭마다 따로 둠).
 
 ### 🌱 운동 시간 (`js/motion.js`)
 
@@ -190,7 +209,7 @@ cd "/Users/lukejoo/Desktop/2026창플" && python3 -m http.server 8777
 
 | 엔티티 | 필드 |
 |---|---|
-| User | `id`, `role`(student/leader), `name`, `birth`, `password`, `profile.grade`, `settings.motion`, `students[]`(지도자) |
+| User | `id`, `role`(student/leader), `name`, `birth`, `password`(로컬만), `profile.grade`, `settings.motion`, `students[]`(지도자) — 서버: `profiles` · `profile_private` · `leader_students` |
 | Chapter | `subject`, `grade`, `term`, `no`, `label`, `title`, `concept`, `subunits[]`, `maxSet[]`, `maxFromTextbook` |
 | Question | `chapterId`, `sub`, `type`(3종), `level`(정렬용), `text`, `visual`, `steps`, `choices`, `answer`, `hint`, `solution`, `src`(MAX) |
 | LearningRecord | `qid`, `chapterId`, `subject`, `grade`, `type`, `sub`, `correct`, `hint`, `mode`(sub/max/pass/review), `sess`, `date` |
@@ -210,9 +229,10 @@ cd "/Users/lukejoo/Desktop/2026창플" && python3 -m http.server 8777
 
 ## 아직 안 한 것
 
-- 서버: 계정·기록·채팅이 기기(브라우저)마다 따로입니다. 지도자와 학생이 같은 기기를 써야 리포트가 보입니다.
+- 지도자 학생 추가: 학생 아이디만 알면 누구나 지도자로 가입해 그 학생의 기록을 볼 수 있어요. 학생 쪽 승인이나 인증코드가 필요해요.
+- 나쁜 말 가리기는 브라우저에서만 해요. 서버(트리거)에서도 거르면 더 안전해요.
 - 홈 화면 디자인: 최신 시안 파일을 받지 못해 기존 들판 그대로입니다. 소단원·문제 화면만 문서의 픽셀 시안에 맞췄습니다.
-- 문의하기: 이 기기에만 저장됩니다. 알림은 학생 기록에서 만든 목록이고 푸시 알림은 아닙니다.
+- 문의하기: 수파베이스 `inquiries` 표에 쌓이고, 대시보드에서 봅니다. 알림은 학생 기록에서 만든 목록이고 푸시 알림은 아닙니다.
 - 2·3학년과 국어 1학기: 교과서 MAX 문제, 회독용 문제 틀.
 - AI 챗봇·AI 표현 필터, 학교/센터 인증코드, 신고·차단, 관리자 화면.
 
