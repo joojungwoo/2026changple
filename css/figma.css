@@ -284,7 +284,7 @@ h1, h2, h3, .jua, .stat-num { font-family: var(--font-fig); }
 .lesson-start { margin-top: 24px; height: 64px; font-size: 20px; }
 
 /* ---------- 채팅 (피그마 '채팅 · 문구 선택 / 이모지 선택 / 미리보기 / 주의 사항') ---------- */
-#app.screen-chatroom, #app.screen-chat { max-width: none; background: #96c6ea; min-height: 100dvh; }
+#app.screen-chatroom:not(.figma), #app.screen-chat:not(.figma) { max-width: none; background: #96c6ea; min-height: 100dvh; }
 .chat-sky { position: fixed; left: 0; right: 0; top: 0; height: 100vh; pointer-events: none; }
 .chat-sky img { position: absolute; zoom: var(--u); margin-left: calc(50vw / var(--u) - 195px); }
 .chat-head .zoomed > * { position: absolute; }
@@ -406,3 +406,14 @@ body { background: #fefbe8; }
 #app .fresult .reward-bar { margin-top: 12px; padding: 10px 14px 13px; color: var(--fg-text); }
 #app .fresult .streak-strip i { border-color: var(--fg-outline); }
 #app .fresult .muted-note { color: var(--fg-text); }
+/* 채팅 글 칸: 직접 쓰기 + 😊 고르기 버튼 */
+.chat-field { display: flex; align-items: center; gap: 6px; padding: 6px 6px 9px 15px; }
+.chat-type { flex: 1; min-width: 0; height: 36px; border: 0 !important; background: none !important; padding: 0 !important; min-height: 0 !important; font-size: 18px; color: var(--fg-text); outline: none; }
+.chat-type::placeholder { color: var(--fg-text-2); }
+.field-emoji { flex: 0 0 auto; }
+.chat-open { flex: 0 0 auto; width: 40px; height: 40px; padding: 0; border: 0; background: none; font-size: 24px; }
+
+/* 말풍선 나타나기는 새로 온 말에만 (다시 그릴 때 깜빡이지 않게) */
+#app .chat-msg { animation: none; }
+#app .chat-msg.new { animation: fade-up .25s both; }
+#app .chat-room { border: 0; box-shadow: none; }

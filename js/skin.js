@@ -26,7 +26,7 @@ const SKIN_RULES = [
   ['.seg button, .avatar, .mode-card, .rep-toggle button, .role-tab, .range-tabs button, .chat-quick button', 'tile', 'surface', 'primary'],
   ['.pill', 'badge', 'surface'],
   ['.badge', 'badge', 'surface'],
-  ['input[type=text], input[type=password], input[type=date], input:not([type]), textarea, select', 'chip', 'surface'],
+  ['input[type=text]:not(.chat-type), input[type=password], input[type=date], input:not([type]), textarea, select', 'chip', 'surface'],
   ['.schedule .sch.now', 'tile', 'primary'],
   ['.chat-msg .chat-msg-body', 'plate', 'surface'],
   ['.chat-msg.mine .chat-msg-body', 'plate', 'mine'],
