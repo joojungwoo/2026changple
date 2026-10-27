@@ -47,7 +47,7 @@ const State = {
 };
 
 /** 로그인 없이 볼 수 있는 화면 */
-const PUBLIC_SCREENS = ['splash', 'login', 'signup'];
+const PUBLIC_SCREENS = ['splash', 'intro', 'login', 'signup'];
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
 
@@ -73,6 +73,8 @@ function toast(msg, kind) {
 }
 
 function go(screen, patch) {
+  // 종이 넘김 테마: 지금 화면을 본떠서 책장처럼 넘겨요. (fx.js가 아직 안 왔으면 그냥 바뀌어요)
+  if (typeof FX !== 'undefined') FX.beforeNav(State.screen, screen);
   State.sheet = null;
   Speech.stop();
   Object.assign(State, patch || {});
@@ -201,7 +203,7 @@ function leaveSplash() {
   // 서버에서 예전 로그인을 확인하는 중이면 끝날 때까지 기다려요.
   if (!Cloud.restored) return Cloud.ready.then(() => ((Cloud.restored = true), safely(() => Store.syncGarden()), leaveSplash()));
   const user = Store.currentUser();
-  if (!user) return go('login');
+  if (!user) return go('intro');
   go(homeOf(user), { grade: user.grade });
 }
 
@@ -1240,6 +1242,7 @@ function render() {
     games: screenGames,
     play: screenPlay,
     rest: screenRest,
+    intro: screenIntro,
     gate: screenGate,
     settings: screenSettings,
     chat: () => Chat.listView(),
@@ -1256,6 +1259,15 @@ function render() {
   app.className = `screen-${State.screen}`;
   Layout.update();
   afterQuizRender();
+  introAfterRender();
+  if (typeof FX !== 'undefined') {
+    FX.onRender();
+    // 공부를 마친 순간: 짧은 축하 (한 번만)
+    if (['result', 'rest'].includes(State.screen) && State.quiz && !State.quiz.celebrated) {
+      State.quiz.celebrated = true;
+      FX.celebrate();
+    }
+  }
   Chat.afterRender(State.screen);
   Motion.afterRender(State.screen);
   if (LEADER_SCREENS.includes(State.screen)) Cloud.refreshLeader(render);
@@ -1508,4 +1520,17 @@ app.addEventListener('submit', async (ev) => {
   State.screen = 'splash';
   render();
   splashTimer = setTimeout(leaveSplash, 1800);
+  loadFx();
 })();
+
+/** 스와이프 효과(fx.js)는 첫 화면이 뜬 뒤 한가할 때 불러와요. 첫 로딩을 느리게 하지 않으려고. */
+function loadFx() {
+  const add = () => {
+    const sc = document.createElement('script');
+    sc.src = 'js/fx.js?v=20';
+    sc.async = true;
+    document.body.appendChild(sc);
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(add, { timeout: 2500 });
+  else setTimeout(add, 1200);
+}

@@ -17,6 +17,7 @@ const SETTING_CHOICES = {
   layout: [['auto', '자동'], ['portrait', '세로'], ['landscape', '가로']],
   anim: [['off', '끄기'], ['low', '약하게'], ['normal', '보통']],
   focusMin: [[5, '5분'], [6, '6분'], [7, '7분']],
+  animTheme: [['grass', '🌿 풀밭'], ['ripple', '💧 물결'], ['bubble', '🫧 비눗방울'], ['star', '✨ 별가루'], ['page', '📖 종이 넘김']],
 };
 
 const Gate = { a: 0, b: 0, err: '' };
@@ -93,7 +94,8 @@ function screenSettings() {
       ${settingGroup('font', '글자 크기')}
       ${settingGroup('ttsRate', '읽어 주기 속도', '', '<button type="button" class="btn btn-block set-try" data-tts-try>🔊 들어 보기</button>')}
       ${settingGroup('layout', '화면 배치', '자동은 iPad를 돌리는 방향을 따라가요. 가로면 문제와 풀이가 나란히 보여요.')}
-      ${settingGroup('anim', '움직이는 효과', '문제를 푸는 동안에는 늘 꺼져 있어요.')}
+      ${settingGroup('anim', '움직이는 효과', '문제를 푸는 동안에는 늘 꺼져 있어요. 기기에서 "동작 줄이기"를 켜도 꺼져요.')}
+      ${pf.anim === 'off' ? '' : settingGroup('animTheme', '쓸어넘기기 효과', '화면을 손가락으로 쓸면 반응해요. 이 화면에서 바로 쓸어 보세요.')}
     </main>`;
 }
 

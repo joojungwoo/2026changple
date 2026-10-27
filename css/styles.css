@@ -1550,3 +1550,57 @@ body[data-anim="low"] * { animation-iteration-count: 1 !important; }
 .pc-cands > p { margin: 0; font-family: var(--font-head); font-size: 22px; text-align: center; }
 .pc-cand-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .pc-cand { min-width: 96px; min-height: 72px; font-family: var(--font-head); font-size: 36px; border: 4px solid var(--ink); background: var(--white); box-shadow: 0 4px 0 var(--ink); }
+
+/* =======================================================================
+ * 소개(랜딩) 화면 · 살아 있는 새싹이 · 스와이프 효과
+ *  - 모든 움직임은 body[data-anim="off"] · prefers-reduced-motion에서 꺼져요. (위쪽 공통 규칙)
+ * ===================================================================== */
+#app.screen-intro { background: var(--px-sky); }
+.intro { display: grid; gap: 18px; padding: 0 16px calc(40px + env(safe-area-inset-bottom)); }
+.intro-hero {
+  min-height: calc(100dvh - 20px); display: grid; align-content: center; justify-items: center; gap: 10px; text-align: center;
+  padding-top: env(safe-area-inset-top);
+}
+.intro-buddy { width: 200px; }
+.intro-buddy.small { width: 110px; margin: 0 auto; }
+.intro-buddy svg { width: 100%; height: auto; display: block; }
+.intro-title { margin: 0; font-size: 56px; color: #2f6f33; }
+.intro-sub { margin: 0; font-size: 22px; }
+.intro-cta { display: grid; gap: 10px; width: min(100%, 420px); margin-top: 10px; }
+.intro-scroll { margin: 12px 0 0; font-size: 17px; color: var(--ink-soft); }
+.intro-sec {
+  display: flex; gap: 16px; align-items: center; padding: 20px 18px;
+  background: var(--px-cream); border: 4px solid var(--px-ink); box-shadow: 0 6px 0 var(--px-ink);
+}
+.intro-sec.alt { flex-direction: row-reverse; text-align: right; }
+.intro-ico { font-size: 52px; line-height: 1; }
+.intro-sec h2 { margin: 0 0 6px; font-size: 24px; }
+.intro-sec p { margin: 0; font-size: 20px; line-height: 1.5; }
+.intro-end { display: grid; gap: 12px; padding: 20px 0; }
+
+/* 히어로 등장: 새싹이 → 제목 → 부제 → 버튼 차례로 */
+.intro-hero > * { animation: fade-up .7s both; }
+.intro-hero .intro-buddy { animation: sprout-grow .9s cubic-bezier(.2, 1.3, .4, 1) both; }
+.intro-hero .intro-title { animation-delay: .25s; }
+.intro-hero .intro-sub { animation-delay: .4s; }
+.intro-hero .intro-cta { animation-delay: .55s; }
+.intro-hero .intro-scroll { animation: fade-up .7s .9s both, tip-bob 1.6s 1.6s ease-in-out infinite; }
+
+/* 아래로 내리면 나타나요 */
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity .6s ease, transform .6s cubic-bezier(.2, .8, .3, 1); }
+.reveal.in { opacity: 1; transform: none; }
+body[data-anim="off"] .reveal { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; } }
+
+/* 새싹이 대기 모션: 숨쉬기 + 눈 깜빡임 */
+.buddy-alive .buddy-body { transform-origin: 50% 100%; transform-box: fill-box; animation: buddy-breathe 3.2s ease-in-out infinite; }
+.buddy-alive .buddy-lids { opacity: 0; animation: buddy-blink 4.6s steps(1, end) infinite; }
+@keyframes buddy-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.02, 1.05); } }
+@keyframes buddy-blink { 0%, 93% { opacity: 0; } 94%, 97% { opacity: 1; } 98%, 100% { opacity: 0; } }
+
+/* 스와이프 효과 캔버스: 누르기는 그대로 아래로 통과해요. */
+#fx-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
+.fx-page {
+  position: fixed; z-index: 45; pointer-events: none; overflow: hidden; background: var(--surface);
+  box-shadow: 0 0 30px rgba(0, 0, 0, .25); backface-visibility: hidden;
+}

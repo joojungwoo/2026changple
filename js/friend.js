@@ -76,7 +76,7 @@ const Friend = {
 
 /** 새싹이 그림 (바꾸기 쉽게 한 곳에만) */
 function friendAvatar(mood) {
-  return `<span class="friend-avatar ${mood || ''}" aria-hidden="true">${sproutLogo()}</span>`;
+  return `<span class="friend-avatar ${mood || ''}" aria-hidden="true">${sproutBuddy()}</span>`;
 }
 
 /** 친구 돕기: 새싹이의 풀이를 보고 틀린 곳을 찾아요. */
