@@ -14,7 +14,7 @@
  * ========================================================================= */
 
 /** 효과가 동작하는 화면: 화면 전환 · 메뉴 · 보상 화면만 */
-const FX_SCREENS = ['intro', 'login', 'signup', 'home', 'garden', 'unit', 'games', 'chat', 'result', 'rest', 'settings'];
+const FX_SCREENS = ['intro', 'login', 'signup', 'home', 'unit', 'games', 'chat', 'result', 'rest', 'settings'];
 const FX_MAX_PARTS = 160;
 
 const FX = {
@@ -32,7 +32,9 @@ const FX = {
   lastSwipe: { vx: 0, t: 0 },
 
   theme() {
-    return (typeof Profile !== 'undefined' && Profile.get().animTheme) || 'grass';
+    // 예전 '풀밭' 테마(화면 아래 풀)는 없앴어요. 풀은 단원 길에서 스크롤할 때 움직여요(ui.js ScrollGrass).
+    const t = (typeof Profile !== 'undefined' && Profile.get().animTheme) || 'star';
+    return t === 'grass' ? 'star' : t;
   },
   level() {
     if (!motionAllowed()) return 0;

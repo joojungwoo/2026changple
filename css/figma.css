@@ -1,0 +1,264 @@
+/* =========================================================================
+ * figma.css — 피그마 디자인 (390×844 기준 화면을 그대로)
+ *
+ *  - 피그마 화면이 기본 디자인이에요. styles.css 위에 덮어써요.
+ *  - 글꼴: DNF Bit Bit v2 (넥슨 던파 비트비트체 v2, 공식 CDN)
+ *  - 색: 피그마 color 변수 (--fg-*)
+ *  - 픽셀 틀: js/pxkit.js의 .pxb-* · .pxchip-* · .pxc-* 클래스
+ * ========================================================================= */
+@font-face {
+  font-family: 'DNFBitBitv2';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://cdn.df.nexon.com/img/common/font/DNFBitBitv2.otf') format('opentype');
+}
+
+:root {
+  --fg-text: #573520;
+  --fg-text-2: #6e4b32;
+  --fg-text-accent: #8f4a12;
+  --fg-outline: #573520;
+  --fg-shadow: #605550;
+  --fg-surface: #f2e6c8;
+  --fg-surface-hi: #fefce5;
+  --fg-surface-sh: #dec59e;
+  --fg-primary: #e4ca6c;
+  --fg-bg: #fefbe8;
+  --fg-accent: #f0a04b;
+  --fg-secondary: #96c6ea;
+  --fg-track: #87d5e1;
+  --fg-grass: #8ebc64;
+  --fg-scrim: #00000080;
+  --font-fig: 'DNFBitBitv2', 'Galmuri11', 'Apple SD Gothic Neo', sans-serif;
+  /* 피그마 글자 크기 */
+  --t-display: 28px; --t-h1: 24px; --t-h2: 20px; --t-body: 18px; --t-label: 16px; --t-caption: 14px;
+}
+
+body, button, input, textarea, select { font-family: var(--font-fig); color: var(--fg-text); }
+h1, h2, h3, .jua, .stat-num { font-family: var(--font-fig); }
+
+/* 픽셀 틀: 테두리 폭 0, 그림은 border-image로 */
+/* 버튼 기본 배경색이 계단 모서리 밖으로 비치지 않게 */
+.px { background-color: transparent; border-style: solid; border-width: 0; }
+.px-press:active { transform: translate(2px, 2px); }
+
+/* =======================================================================
+ * 무대: 피그마 390×844 좌표를 그대로, zoom으로 확대 (js/stage.js)
+ * ===================================================================== */
+#app.figma { max-width: none; background: transparent; min-height: 100dvh; }
+.fscr {
+  position: relative; min-height: 100dvh; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(var(--sky) 0 50%, var(--ground) 50% 100%);
+}
+.fscr.scroll { justify-content: flex-start; overflow: visible; }
+.fbg { position: absolute; left: 0; right: 0; pointer-events: none; image-rendering: auto; }
+.stage { position: relative; width: 390px; flex: 0 0 auto; zoom: var(--u); }
+.stage > * { position: absolute; }
+.stage img { display: block; }
+/* 무대 밖에 고정되는 위 · 아래 막대 (스크롤 화면): 화면 폭 전체에 고정하고, 안쪽 390px만 확대해요. */
+.fixed-top, .fixed-bottom { position: fixed; left: 0; right: 0; z-index: 20; pointer-events: none; }
+.fixed-top { top: 0; } .fixed-bottom { bottom: 0; }
+.fixed-top > .zoomed, .fixed-bottom > .zoomed { position: relative; width: 390px; margin: 0 auto; zoom: var(--u); pointer-events: none; }
+.fixed-top > .zoomed > *, .fixed-bottom > .zoomed > * { pointer-events: auto; }
+
+/* ---------- 글자 (피그마 Type) ---------- */
+.t-display { font-size: 28px; line-height: 1.2; }
+.t-h1 { font-size: 24px; line-height: 1.25; }
+.t-h2 { font-size: 20px; line-height: 1.3; }
+.t-body { font-size: 18px; line-height: 1.5; }
+.t-label { font-size: 16px; line-height: 1.3; }
+.t-caption { font-size: 14px; line-height: 1.4; }
+/* 흰 글자 + 갈색 테두리 (Title Label) */
+.t-outline { color: #fff; -webkit-text-stroke: 6px var(--fg-outline); paint-order: stroke fill; white-space: nowrap; }
+
+/* ---------- 부품 ---------- */
+.f-btn { display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--fg-text); font: inherit; }
+.f-btn:focus-visible { outline: 3px solid #2f6fd6; outline-offset: 2px; }
+.f-round { width: 48px; height: 48px; padding: 0; }
+.f-round img, .f-round .ico { width: 24px; height: 24px; }
+.f-round:active { transform: translateY(2px); }
+.f-plate { height: 42px; padding: 9px 21px 12px 18px; display: flex; align-items: center; justify-content: center; white-space: nowrap; font-size: 16px; line-height: 1.3; }
+.f-badge { height: 36px; padding: 6px 12px; display: flex; align-items: center; justify-content: center; white-space: nowrap; font-size: 14px; line-height: 1.4; }
+.f-tile:active { filter: brightness(.97); }
+
+/* 아래 탭바 (Bottom Tab Bar) */
+.ftabbar { left: 0; top: 720px; width: 390px; height: 90px; padding: 12px 32px; display: flex; align-items: center; justify-content: space-between; }
+.fixed-bottom .ftabbar { position: relative; top: 0; margin-bottom: 34px; }
+.ftab { position: relative; width: 57px; height: 57px; padding: 6px 6px 9px 3px; }
+.ftab.on { width: 66px; height: 66px; }
+.ftab img { width: 40px; height: 40px; object-fit: contain; }
+.ftab.on img { width: 46px; height: 46px; }
+.ftab .dot {
+  position: absolute; top: -6px; right: -6px; min-width: 24px; height: 24px; padding: 0 5px;
+  display: grid; place-items: center; background: #e2443f; color: #fff; border: 3px solid var(--fg-outline); font-size: 12px; line-height: 1;
+}
+
+/* ---------- 스플래시 · 로딩 ---------- */
+.scr-splash, .scr-loading { background: var(--fg-bg); }
+.splash-logo-img { left: 144px; top: 349px; width: 103px; height: 104px; object-fit: cover; }
+.splash-name { left: 0; top: 460px; width: 390px; text-align: center; font-size: 30px; color: #564225; }
+.loading-logo { left: 135px; top: 320px; width: 120px; height: 120px; object-fit: contain; }
+.loading-text { left: 0; top: 458px; width: 390px; text-align: center; font-size: 24px; line-height: 1.25; }
+.loading-dots { left: 156px; top: 506px; display: flex; gap: 12px; }
+.loading-dots i { width: 18px; height: 18px; display: block; }
+
+/* ---------- 홈 ---------- */
+.home-avatar { left: 16px; top: 54px; width: 54px; height: 54px; display: grid; place-items: center; padding: 3px 6px 9px 3px; }
+.home-avatar img { width: 36px; height: 36px; object-fit: contain; }
+.home-avatar span { font-size: 30px; line-height: 1; }
+.home-name { left: 78px; top: 60px; }
+.home-badge { left: 222px; top: 63px; width: 96px; }
+.home-gear { left: 326px; top: 57px; }
+.home-gear img { width: 24px; height: 24px; }
+.signpost { width: 138px; height: 153px; padding: 0; background: none; border: 0; isolation: isolate; }
+.signpost .board { position: absolute; left: 0; top: 0; width: 138px; height: 111px; }
+.signpost .face { position: absolute; left: 13px; top: 12px; width: 108px; height: 81px; display: grid; place-items: center; padding-bottom: 3px; }
+.signpost .face img { width: 60px; height: 60px; object-fit: contain; }
+.signpost .post { position: absolute; left: 58px; top: 105px; width: 21px; height: 48px; }
+.signpost:active { transform: translateY(3px); }
+.sign-math { left: 30px; top: 236px; }
+.sign-korean { left: 222px; top: 276px; }
+.plate-math { left: 65px; top: 398px; }
+.plate-korean { left: 257px; top: 438px; }
+.sign-thirsty {
+  position: absolute; left: 50%; top: -30px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 14px; padding: 4px 10px 6px; background: #fff; border: 3px solid var(--fg-outline); color: var(--fg-text-accent);
+}
+.home-boat { left: 128px; top: 580px; width: 96px; height: 72px; padding: 0; background: none; border: 0; }
+.home-boat img { width: 96px; height: 72px; }
+.home-boat:active { transform: translateY(3px); }
+.plate-game { left: 142px; top: 658px; }
+
+/* ---------- 게임 (바다) ---------- */
+.scr-games { --sky: #96c6ea; --ground: #2c6fa3; }
+.sea {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(#96c6ea 0 calc(168px * var(--u)), #b5e7ee 0 calc(174px * var(--u)), #7fc8e8 0 calc(384px * var(--u)), #5ab0dc 0 calc(588px * var(--u)), #3f94c8 0 calc(756px * var(--u)), #2c6fa3 0 calc(816px * var(--u)), #e8d8b2 0);
+}
+.game-card { top: 276px; width: 165px; height: 186px; flex-direction: column; gap: 9px; padding: 15px 15px 18px 12px; }
+.game-card .pic { height: 52px; display: grid; place-items: center; font-size: 46px; line-height: 1; }
+.game-card .pic img { max-height: 52px; }
+.game-card b { font-weight: 400; font-size: 20px; line-height: 1.3; }
+.game-card small { font-size: 14px; line-height: 1.3; color: var(--fg-text-2); text-align: center; }
+.game-card:active { transform: translate(3px, 3px); }
+
+/* ---------- 위쪽 막대: 뒤로 · 학년 칩 · 학기 칩 (피그마 Top Bar) ---------- */
+.f-topbar { position: absolute; left: 0; top: 47px; width: 326px; height: 72px; padding: 12px 16px; display: flex; gap: 8px; align-items: center; }
+.f-topbar > * { position: relative; }
+.f-chip { flex: 1 0 0; height: 48px; padding: 6px 15px; gap: 8px; font-size: 16px; line-height: 1.3; white-space: nowrap; }
+.f-chip img { width: 24px; height: 24px; }
+.f-menu { position: absolute; top: 110px; width: 115px; padding: 15px 21px 18px 18px; display: flex; flex-direction: column; gap: 9px; }
+.f-menu-item { justify-content: flex-start; min-height: 30px; padding: 0; border: 0; background: none; font-size: 16px; line-height: 1.3; }
+.f-menu-item.on { color: var(--fg-text-accent); }
+
+/* ---------- 단원 길 ---------- */
+.scr-garden .stage { z-index: 1; }
+.field-cover { position: absolute; left: 0; right: 0; top: calc(630px * var(--u)); bottom: 0; background: #8cb95e; }
+.scroll-grass { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; }
+.scr-garden .fixed-top, .scr-garden .fixed-bottom { z-index: 5; }
+.path-svg { pointer-events: none; }
+.unit-plot { width: 120px; height: 120px; padding: 0; background: none; border: 0; }
+.unit-plot img { width: 120px; height: 120px; object-fit: contain; }
+.unit-plot.wilt img { filter: saturate(.35) brightness(.95); }
+.unit-plot:active { transform: translateY(3px); }
+.unit-title { width: 240px; text-align: center; pointer-events: none; }
+.unit-bubble { z-index: 2; font-size: 14px; height: 36px; padding: 6px 14px 9px 12px; color: var(--fg-text-accent); }
+.unit-grow { z-index: 2; }
+.unit-empty { left: 0; top: 330px; width: 390px; text-align: center; color: #fff; -webkit-text-stroke: 5px var(--fg-outline); paint-order: stroke fill; }
+
+/* ---------- 단원 선택 ---------- */
+.unit-name { left: 72px; top: 60px; max-width: 302px; overflow: hidden; }
+.grow-now, .grow-next { top: 148px; width: 120px; height: 120px; }
+.grow-now { left: 36px; } .grow-next { left: 234px; }
+.grow-now img, .grow-next img { width: 120px; height: 120px; object-fit: contain; }
+.grow-now.wilt img { filter: saturate(.35); }
+.grow-arrow { left: 165px; top: 184px; width: 60px; height: 54px; }
+.sparkle { width: 27px; height: 27px; }
+.sparkle.s1 { left: 180px; top: 120px; } .sparkle.s2 { left: 342px; top: 246px; }
+.grow-done { left: 170px; top: 190px; width: 200px; }
+.gauge { left: 36px; top: 300px; width: 318px; height: 48px; }
+.gauge-track { position: absolute; left: 0; top: 10.5px; width: 282px; height: 27px; }
+.gauge-water { position: absolute; left: 3px; top: 3px; height: 21px; background: linear-gradient(#b5e7ee 0 3px, #87d5e1 3px calc(100% - 3px), #6bbfcd calc(100% - 3px)); }
+.gauge-div { position: absolute; top: 3px; width: 3px; height: 21px; background: var(--fg-outline); }
+.gauge-drop { position: absolute; left: 270px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; }
+.gauge-drop img { width: 24px; height: 24px; }
+.lesson { left: 24px; width: 342px; height: 60px; padding: 6px 24px 9px 21px; justify-content: space-between; text-align: left; }
+.lesson.max { justify-content: center; gap: 12px; }
+.lesson small { font-size: 14px; color: var(--fg-text-2); white-space: nowrap; }
+.lesson span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lesson:active { transform: translate(3px, 3px); }
+.f-button { min-height: 48px; padding: 12px 24px 15px 21px; gap: 8px; font-size: 16px; line-height: 1.3; }
+.f-button:active { transform: translate(3px, 3px); }
+.cta { left: 24px; top: 378px; width: 342px; height: 60px; font-size: 18px; }
+
+/* ---------- 팝업 (피그마 소단원 팝업) ---------- */
+.f-popup { left: 0; top: 0; width: 390px; height: 844px; z-index: 10; }
+.f-popup > * { position: absolute; }
+.f-scrim { position: fixed !important; inset: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, .5); border: 0; zoom: calc(1 / var(--u)); }
+.popup-panel { left: 24px; top: 318px; width: 342px; height: 252px; }
+.choice-card { top: 357px; width: 147px; height: 162px; flex-direction: column; gap: 9px; padding: 15px 15px 18px 12px; }
+.choice-card .cc-book { width: 64px; height: 48px; }
+.choice-card .cc-pencil { width: 48px; height: 48px; margin: 0 8px; }
+.choice-card:active { transform: translate(3px, 3px); }
+.popup-title { left: 50%; top: 300px; transform: translateX(-50%); }
+.popup-note { left: 24px; top: 527px; width: 342px; text-align: center; color: var(--fg-text-2); }
+.max-text { left: 48px; width: 294px; display: grid; gap: 8px; }
+.max-text p { margin: 0; font-size: 17px; line-height: 1.45; }
+
+/* =======================================================================
+ * 스킨: 기존 부품의 테두리 · 그림자 · 배경을 지우고 픽셀 틀(border-image)만 보이게
+ * ===================================================================== */
+#app .px { border-width: 0 !important; border-style: solid; box-shadow: none !important; background-color: transparent !important; outline-offset: 2px; }
+#app .px-round { background-color: transparent !important; }
+#app .px:not(.px-round):not(.px-cell) { border-radius: 0; }
+#app .px-tile:not(:disabled):active { transform: translate(3px, 3px); }
+#app .px[disabled], #app .px:disabled { opacity: .45; }
+#app .px-tile.choice:disabled, #app .px-tiled:disabled { opacity: 1; }
+#app .choice.dim { opacity: .5; }
+#app .choice.correct, #app .choice.correct .choice-text { color: #fff; }
+#app input.px, #app textarea.px, #app select.px { padding: 10px 16px; min-height: 52px; color: var(--fg-text); }
+#app textarea.px { padding: 14px 16px; }
+/* 글꼴 · 글자색은 피그마로 */
+#app, #app button, #app input, #app textarea { font-family: var(--font-fig); }
+#app .btn, #app .choice, #app .np-key, #app .pc-tool { color: var(--fg-text); }
+#app .btn-primary, #app .btn-gold { color: var(--fg-text) !important; }
+
+/* ---------- 문제풀기 (피그마 '문제풀기': Meadow 배경 · 진행 칸 · 큰 판 · 4색 타일) ---------- */
+.fbg-view { position: fixed; left: 0; right: 0; top: 0; z-index: 0; }
+#app.screen-quiz { max-width: none; background: #97ba6e; }
+#app.screen-quiz .quiz-scene { position: relative; z-index: 1; background: none; }
+#app.screen-quiz .scene-ground { background: none; border-top: 0; }
+#app.screen-quiz .qcells { flex: 0 1 auto; height: 24px; border: 0; background: none; gap: 0; overflow: visible; }
+#app.screen-quiz .qcells i { width: 36px; height: 24px; margin-right: -3px; flex: 0 0 auto; }
+#app.screen-quiz .qcells i.now { filter: brightness(1.08); outline: 3px solid #fff; outline-offset: -6px; }
+#app.screen-quiz .scene-top { justify-content: flex-start; gap: 14px; }
+#app.screen-quiz .round-btn { width: 48px; height: 48px; font-size: 0; }
+#app.screen-quiz .round-btn::before { content: ''; width: 24px; height: 24px; background: url('../assets/ui/back.svg') center / contain no-repeat; }
+#app.screen-quiz .quiz-title { color: var(--fg-text); font-size: 16px; }
+#app.screen-quiz .question-card { padding: 22px 22px 25px 19px; color: var(--fg-text); }
+#app.screen-quiz .question-text { font-size: calc(18px * var(--fs)); line-height: 1.5; }
+#app.screen-quiz .choices.grid { gap: 12px; }
+#app.screen-quiz .choice { min-height: 90px; padding: 6px 18px 9px 15px; font-size: calc(24px * var(--fs)); line-height: 1.25; color: var(--fg-text); }
+#app.screen-quiz .choices:not(.grid) .choice { min-height: 66px; font-size: calc(20px * var(--fs)); justify-content: flex-start; }
+#app.screen-quiz .btn-hint { justify-self: start; width: auto; min-height: 56px; padding: 0 8px; gap: 8px; display: inline-flex; align-items: center; background: none !important; border: 0 !important; box-shadow: none !important; font-size: 16px; }
+#app.screen-quiz .btn-hint::before { content: ''; width: 20px; height: 26px; background: url('../assets/ui/bulb.svg') center / contain no-repeat; }
+#app.screen-quiz .rep-toggle button { font-size: 16px; min-height: 52px; padding: 6px 14px 9px 12px; }
+#app.screen-quiz .rep-toggle button.on::before { content: none; }
+#app.screen-quiz .np-key { font-size: 26px; min-height: 64px; }
+#app.screen-quiz .np-key.fn { font-size: 16px; }
+#app.screen-quiz .feedback { padding: 18px 20px 22px 17px; }
+#app.screen-quiz .btn-lg { min-height: 60px; font-size: 20px; }
+
+/* 오늘 할 일 그림 띠: 피그마 톤으로 작게 (위쪽을 가리지 않게) */
+#app .schedule { position: relative; background: none; border-bottom: 0; padding: 4px 12px 8px; gap: 4px; z-index: 2; }
+#app .sch { min-width: 0; padding: 6px 10px 9px 8px; border-color: transparent; }
+#app .sch-ico { font-size: 20px; }
+#app .sch-label { font-size: 13px; color: var(--fg-text); }
+#app .sch.now { padding: 6px 12px 9px 10px; }
+#app .sch.now .sch-ico { font-size: 24px; }
+#app .sch.now .sch-label { font-size: 15px; }
+#app .sch.todo { opacity: .55; filter: none; }
+#app .sch-arrow { color: var(--fg-outline); }
+#app .sch-check { background: var(--fg-track); color: var(--fg-text); border: 2px solid var(--fg-outline); }

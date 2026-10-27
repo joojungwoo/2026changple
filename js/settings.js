@@ -14,7 +14,7 @@ const SETTING_CHOICES = {
   layout: [['auto', '자동'], ['portrait', '세로'], ['landscape', '가로']],
   anim: [['off', '끄기'], ['low', '약하게'], ['normal', '보통']],
   focusMin: [[5, '5분'], [6, '6분'], [7, '7분']],
-  animTheme: [['grass', '🌿 풀밭'], ['ripple', '💧 물결'], ['bubble', '🫧 비눗방울'], ['star', '✨ 별가루'], ['page', '📖 종이 넘김']],
+  animTheme: [['star', '✨ 별가루'], ['ripple', '💧 물결'], ['bubble', '🫧 비눗방울'], ['page', '📖 종이 넘김']],
 };
 
 function settingGroup(key, title, help, extra) {

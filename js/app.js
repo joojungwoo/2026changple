@@ -33,6 +33,8 @@ const State = {
   role: 'student', // 로그인 · 회원가입 화면의 탭
   subject: null,
   grade: null,
+  term: 1, // 학기 (단원 길 위쪽 칩)
+  menu: null, // 단원 길 위쪽 펼침 메뉴: 'grade' | 'term'
   chapterId: null,
   subIdx: null, // 개념 보기에서 보여 줄 소단원
   sheet: null, // 소단원 화면 위 팝업: { kind: 'sub', idx } | { kind: 'max' }
@@ -47,7 +49,10 @@ const State = {
 };
 
 /** 로그인 없이 볼 수 있는 화면 */
-const PUBLIC_SCREENS = ['splash', 'intro', 'login', 'signup'];
+const PUBLIC_SCREENS = ['splash', 'loading', 'intro', 'login', 'signup'];
+/** 피그마 무대(stage.js)로 그리는 화면 */
+const FIGMA_SCREENS = ['splash', 'loading', 'home', 'garden', 'unit', 'games'];
+/** 화면 사이를 오갈 때 펼친 메뉴는 닫아요. */
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
 
@@ -73,6 +78,7 @@ function toast(msg, kind) {
 }
 
 function go(screen, patch) {
+  State.menu = null;
   // 종이 넘김 테마: 지금 화면을 본떠서 책장처럼 넘겨요. (fx.js가 아직 안 왔으면 그냥 바뀌어요)
   if (typeof FX !== 'undefined') FX.beforeNav(State.screen, screen);
   State.sheet = null;
@@ -165,43 +171,22 @@ function pill(kind, icon, text) {
   return `<span class="pill ${kind}"><span class="ico">${icon}</span>${esc(String(text))}</span>`;
 }
 
-/** 학생 탭바: 게임 · 홈 · 채팅 (복습은 텃밭의 물 주기로 합쳤어요) */
+/** 학생 탭바 (무대 밖 화면용): 피그마 탭바를 화면 아래에 고정해요. 무대 화면은 ui.js의 fTabbar를 써요. */
 function tabbar(active) {
-  const items = [
-    { id: 'games', icon: pxIcon('game'), label: '게임' },
-    { id: 'home', icon: pxIcon('home'), label: '홈' },
-    { id: 'chat', icon: pxIcon('chat'), label: '채팅' },
-  ];
-  const unread = Chat.unread();
-  return `
-    <nav class="tabbar">
-      ${items
-        .map(
-          (i) => `<button class="tab ${active === i.id ? 'active' : ''}" data-go="${i.id}">
-            <span class="tab-icon">${i.icon}${i.id === 'chat' && unread ? `<span class="dot">${unread > 9 ? '9+' : unread}</span>` : ''}</span>
-            <span class="tab-label">${i.label}</span>
-          </button>`
-        )
-        .join('')}
-    </nav>`;
+  return `<div class="fixed-bottom"><div class="zoomed">${fTabbar(active)}</div></div><div class="tabbar-space" aria-hidden="true"></div>`;
 }
 
 /* ============================ 0. 스플래시 ============================ */
-function screenSplash() {
-  return `
-    <button class="splash" data-skip aria-label="한걸음 시작하기">
-      ${sproutLogo('splash-logo')}
-      <h1>한걸음</h1>
-      <p>천천히, 한 걸음씩 배워요</p>
-    </button>`;
-}
 
 let splashTimer;
 function leaveSplash() {
   clearTimeout(splashTimer);
-  if (State.screen !== 'splash') return;
-  // 서버에서 예전 로그인을 확인하는 중이면 끝날 때까지 기다려요.
-  if (!Cloud.restored) return Cloud.ready.then(() => ((Cloud.restored = true), safely(() => Store.syncGarden()), leaveSplash()));
+  if (!['splash', 'loading'].includes(State.screen)) return;
+  // 서버에서 예전 로그인을 확인하는 중이면 로딩 화면을 보여 주고 끝날 때까지 기다려요.
+  if (!Cloud.restored) {
+    if (State.screen === 'splash') go('loading');
+    return Cloud.ready.then(() => ((Cloud.restored = true), safely(() => Store.syncGarden()), leaveSplash()));
+  }
   const user = Store.currentUser();
   if (!user) return go('intro');
   go(homeOf(user), { grade: user.grade });
@@ -292,214 +277,9 @@ function screenSignup() {
 
 /* ========================= 3. 홈 (과목 선택 들판) ========================= */
 
-/** 들판 위 새싹 장식 위치 (%) */
-const WORLD_SPROUTS = [
-  { left: 14, top: 20 }, { left: 88, top: 12 }, { left: 44, top: 9 }, { left: 90, top: 42 },
-  { left: 10, top: 56 }, { left: 58, top: 88 }, { left: 86, top: 92 }, { left: 8, top: 90 },
-];
 
-function screenHome() {
-  const user = Store.currentUser();
-  const t = Store.todaySummary();
-  const pos = { math: { left: 68, top: 27 }, korean: { left: 32, top: 72 } };
-  const grade = State.grade || user.grade;
-
-  const islands = SUBJECTS.map((s) => {
-    const views = getChapters(s.id, grade).map((c) => Store.chapterGarden(c.id));
-    const grown = views.filter((v) => v.passCount >= 1).length;
-    const thirsty = views.filter((v) => v.wilted).length;
-    return `<button class="island ${s.id}" data-subject="${s.id}" style="left:${pos[s.id].left}%;top:${pos[s.id].top}%">
-      <span class="island-icon">${pxIcon(s.id)}</span>
-      <span class="island-name">${s.name}</span>
-      <span class="island-sub">${pxIcon('sprout')} ${grown} / ${views.length}</span>
-      ${thirsty ? `<span class="island-thirsty">🥀 ${THIRSTY_BUBBLE}</span>` : ''}
-    </button>`;
-  }).join('');
-
-  return `
-    ${hud({
-      name: user.nick || user.name,
-      avatar: user.avatar,
-      title: esc(user.nick || user.name),
-      rightPills: [pill('ok', pxIcon('pencil'), t.solved), pill('fire', pxIcon('fire'), t.streak)],
-      settings: true,
-      logout: true,
-    })}
-    <main class="page flush">
-      <div class="world">
-        ${pixelRiver()}
-        ${WORLD_SPROUTS.map((d) => `<span class="world-deco" style="left:${d.left}%;top:${d.top}%">${sproutLogo()}</span>`).join('')}
-        ${islands}
-        <p class="world-hint">어느 밭으로 갈까요?</p>
-      </div>
-    </main>
-    ${tabbar('home')}`;
-}
 
 /* ========================= 4. 텃밭 (단원 = 밭) ========================= */
-function screenGarden() {
-  const subject = getSubject(State.subject);
-  const grade = State.grade;
-  const views = getChapters(subject.id, grade).map((c) => Store.chapterGarden(c.id));
-  const grown = views.filter((v) => v.passCount >= 1).length;
-
-  const plots = views
-    .map((v) => {
-      const ch = v.chapter;
-      return `<div class="plot ${v.wilted ? 'thirsty' : ''}">
-        <button class="plot-btn" data-unit="${ch.id}"
-                aria-label="${ch.label} ${esc(ch.title)} · ${STAGE_NAME[v.stage]}${v.wilted ? ' · 시들었어요' : ''} · 물 ${v.water}칸">
-          <span class="plot-sign">${ch.label}</span>
-          ${plantSvg(v.stage, `plot-plant ${v.wilted ? 'wilt' : ''}`)}
-          <span class="plot-title">${esc(ch.title)}</span>
-          ${waterCells(v)}
-          ${v.canGrow ? `<span class="grow-tag">✨ 다시 공부하면 ${STAGE_NAME[STAGES[v.passCount + 2]]}!</span>` : ''}
-        </button>
-        ${v.wilted ? `<button class="bubble" data-water="${ch.id}" aria-label="${THIRSTY_BUBBLE} 물 주기(복습) 시작">${THIRSTY_BUBBLE}</button>` : ''}
-      </div>`;
-    })
-    .join('');
-
-  const legend = ['seed', 'sprout', 'tree', 'fruit']
-    .map(
-      (s, i) => `${i ? '<span class="legend-arrow">→</span>' : ''}
-        <span class="legend-item">${plantSvg(s)}<b>${STAGE_NAME[s]}</b><small>${i ? `${i}회독` : '공부 시작'}</small></span>`
-    )
-    .join('');
-
-  return `
-    ${hud({
-      back: 'home',
-      title: `${pxIcon(subject.id)} ${subject.name} 텃밭`,
-      rightPills: [pill('ok', pxIcon('sprout'), `${grown} / ${views.length}`)],
-    })}
-    <div class="grade-tabs">
-      ${GRADES.map(
-        (g) =>
-          `<button class="gtab ${g === grade ? 'active' : ''} ${subject.id}" data-grade="${g}">${g}학년</button>`
-      ).join('')}
-    </div>
-    <main class="page flush">
-      <div class="garden">
-        <p class="garden-hint">밭을 눌러 공부해요 · 시든 식물은 말풍선을 눌러 물을 줘요 ${pxIcon('drop')}</p>
-        <div class="plots">${plots}</div>
-        <div class="legend">${legend}</div>
-        <span class="worm" aria-hidden="true">🪱</span>
-      </div>
-    </main>`;
-}
-
-/* ========================= 5. 소단원 학습 ========================= */
-
-/** 물 게이지 아래 안내 문구 */
-function growthNote(v) {
-  const next = STAGE_NAME[STAGES[v.passCount + 2]];
-  if (v.wilted) return '식물이 시들고 있어요. 물을 주면 다시 싱싱해져요!';
-  if (v.stage === 'fruit') return '열매까지 모두 키웠어요! 🎉';
-  if (v.passCount >= 1) {
-    if (v.canGrow) return `스스로 다시 공부하면 ${next}로 자라요.`;
-    return `${v.dueIn === 1 ? '내일' : `${v.dueIn}일 뒤`}부터 다시 공부하면 ${next}로 자라요.`;
-  }
-  return '소단원 하나를 끝낼 때마다 물이 한 칸 차요. 가득 차면 새싹이 나요!';
-}
-
-function maxButton(v) {
-  if (v.max.state === 'passed') return `<div class="max-btn done"><b>MAX</b><span>통과! 물을 가득 채웠어요 ${pxIcon('drop')}</span></div>`;
-  if (v.full) return `<div class="max-btn done"><b>MAX</b><span>소단원을 모두 끝내서 물이 가득해요 ${pxIcon('drop')}</span></div>`;
-  if (v.max.state === 'locked') {
-    return `<button class="max-btn locked" data-max-locked><b>🔒 MAX</b><span>빨갛게 표시된 소단원을 다시 공부하면 열려요</span></button>`;
-  }
-  return `<button class="max-btn" data-max><b>MAX</b><span>학교에서 이미 배웠나요? 한 번에 물 채우기!</span></button>`;
-}
-
-function subSheet(ch, s) {
-  const subject = getSubject(ch.subject);
-  return `
-    <section class="sheet" role="dialog" aria-modal="true" aria-label="${s.sub.no} ${esc(s.sub.title)}">
-      <div class="sheet-tag ${subject.id}">${ch.grade}학년 ${subject.name} ${ch.label}</div>
-      <button class="icon-btn sheet-close" data-close-sheet aria-label="닫기">✕</button>
-      <h2>${esc(ch.title)}</h2>
-      <p class="sheet-sub"><b>${s.sub.no}</b> ${esc(s.sub.title)} · 문제 ${s.total}개 · ${s.solved}개 풀었어요</p>
-      <div class="sheet-preview ${subject.id}">${esc(s.sub.icon)}</div>
-      <button class="btn btn-lg btn-block" data-lesson="${s.sub.idx}">📖 개념 보기</button>
-      <button class="btn btn-primary btn-lg btn-block" style="margin-top:10px" data-start-sub="${s.sub.idx}">${pxIcon('pencil')} 문제 풀기</button>
-    </section>`;
-}
-
-function maxSheet(ch) {
-  const n = ch.maxSet.length;
-  return `
-    <section class="sheet" role="dialog" aria-modal="true" aria-label="MAX 도전">
-      <div class="sheet-tag gold">${ch.label} MAX</div>
-      <button class="icon-btn sheet-close" data-close-sheet aria-label="닫기">✕</button>
-      <h2>⚡ MAX 도전</h2>
-      <p class="sheet-sub">학교에서 이미 배운 내용이라면<br>${ch.maxFromTextbook ? '교과서 문제' : '문제'}를 풀고 소단원을 한 번에 건너뛰어요.</p>
-      <div class="rowline"><span>🎯 문제</span><b>${ch.maxFromTextbook ? '교과서 문제 ' : ''}${n}문제 · 힌트 없음</b></div>
-      <div class="rowline"><span>${pxIcon('drop')} 통과하면</span><b>${n}문제 중 ${Math.ceil(n * MAX_PASS_RATE)}문제 이상 → 물 가득</b></div>
-      <div class="rowline"><span>🔒 점수가 낮으면</span><b>다시 공부할 소단원을 알려 줘요</b></div>
-      <button class="btn btn-gold btn-lg btn-block" style="margin-top:14px" data-start-max>MAX 도전하기</button>
-    </section>`;
-}
-
-function screenUnit() {
-  const ch = CHAPTER_BY_ID[State.chapterId];
-  const v = Store.chapterGarden(ch.id);
-  const nextStage = STAGES[v.passCount + 2];
-
-  let sheet = '';
-  if (State.sheet && State.sheet.kind === 'sub' && v.subs[State.sheet.idx]) sheet = subSheet(ch, v.subs[State.sheet.idx]);
-  if (State.sheet && State.sheet.kind === 'max') sheet = maxSheet(ch);
-
-  let cta = '';
-  if (v.wilted) {
-    cta = `<button class="btn btn-water btn-lg btn-block" data-water="${ch.id}">${pxIcon('drop')} 물 주기 (복습)</button>`;
-  } else if (v.canGrow) {
-    cta = `<button class="btn btn-gold btn-lg btn-block" data-grow="${ch.id}">
-      ${STAGE_ICON[nextStage]} ${v.passCount + 1}회독 하고 ${STAGE_NAME[nextStage]}로 키우기
-    </button>`;
-  }
-
-  return `
-    <div class="scene">
-      <header class="scene-top">
-        <button class="round-btn" data-back="garden" aria-label="뒤로 가기">‹</button>
-        <h1>${ch.label} · ${esc(ch.title)}</h1>
-      </header>
-
-      <div class="scene-plants">
-        <figure class="${v.wilted ? 'thirsty' : ''}">
-          ${plantSvg(v.stage, v.wilted ? 'wilt' : '')}
-          <figcaption>${STAGE_NAME[v.stage]}${v.passCount ? ` · ${v.passCount}회독` : ''}</figcaption>
-          ${v.wilted ? `<span class="bubble still">${THIRSTY_BUBBLE}</span>` : ''}
-        </figure>
-        ${
-          nextStage
-            ? `<span class="scene-arrow" aria-hidden="true">➜</span>
-               <figure class="next">${plantSvg(nextStage)}<figcaption>${STAGE_NAME[nextStage]}</figcaption></figure>`
-            : ''
-        }
-      </div>
-
-      <div class="scene-gauge">${waterCells(v)}<span class="drop" aria-hidden="true">${pxIcon('drop')}</span></div>
-      <p class="scene-note">${growthNote(v)}</p>
-
-      <main class="scene-ground">
-        ${cta}
-        ${v.subs
-          .map(
-            (s) => `<button class="sub-btn ${s.cleared ? 'cleared' : ''} ${s.weak ? 'weak' : ''}" data-sub="${s.sub.idx}">
-              <b>${s.sub.no}</b>
-              <span>${esc(s.sub.title)}</span>
-              <small>${s.weak ? '다시 공부해요!' : `${s.solved} / ${s.total}`}</small>
-            </button>`
-          )
-          .join('')}
-        ${maxButton(v)}
-      </main>
-    </div>
-    ${sheet ? `<div class="overlay" data-backdrop>${sheet}</div>` : ''}`;
-}
-
 /* ========================== 6. 개념 학습 ========================== */
 function screenLesson() {
   const ch = CHAPTER_BY_ID[State.chapterId];
@@ -612,11 +392,15 @@ function quizTitle(q) {
 }
 
 /** 진행 칸: 문제마다 한 칸. 답을 확인하면 한 칸이 차요. */
+/** 진행 칸 (피그마 Step Gauge): 푼 문제 칸은 하늘색, 지금 문제는 흰 테두리 */
 function quizCells(q) {
   return `<div class="qcells" role="img" aria-label="${q.questions.length}문제 중 ${q.index + 1}번째">
-    ${q.questions.map((_, i) => `<i class="${i < q.results.length ? 'on' : ''} ${i === q.index ? 'now' : ''}"></i>`).join('')}
+    ${q.questions.map((_, i) => `<i class="px px-cell ${i < q.results.length ? 'px-track' : 'px-surface'} ${i === q.index ? 'now' : ''}"></i>`).join('')}
   </div>`;
 }
+
+/** 보기 타일 색 (피그마 Choice Tile: 빨강 · 노랑 · 파랑 · 보라) */
+const CHOICE_COLORS = ['red', 'yellow', 'blue', 'purple'];
 
 /**
  * 지금 문제의 문제 데이터 · 표현 방식 · 입력 방식
@@ -657,13 +441,15 @@ function inputChoice(parts) {
   return `<div class="choices ${grid ? 'grid' : ''}">
     ${item.choices
       .map((c, i) => {
-        let cls = `choice c${i % 4}`;
+        const color = CHOICE_COLORS[i % 4];
+        // 피그마 Answer Button: 고르면 그림자 없이 내려앉고, 정답은 초록 + 기호. (오답은 빨강 대신 흐린 점선 + 🤔)
+        let cls = `choice c${i % 4} px px-tile px-${color}`;
         let mark = '';
         if (q.checked) {
-          if (i === item.answer) (cls += ' correct'), (mark = '<span class="choice-mark">⭐ 정답</span>');
+          if (i === item.answer) (cls = `choice correct px px-tile px-success`), (mark = '<span class="choice-mark">⭐ 정답</span>');
           else cls += ' dim';
-        } else if (tried.has(i)) (cls += ' tried'), (mark = '<span class="choice-mark">🤔 다시</span>');
-        else if (q.selected === i) (cls += ' selected'), (mark = '<span class="choice-mark">👆</span>');
+        } else if (tried.has(i)) (cls = `choice tried px px-tiled px-surface`), (mark = '<span class="choice-mark">🤔 다시</span>');
+        else if (q.selected === i) (cls = `choice selected px px-tiled px-${color}`), (mark = '<span class="choice-mark">👆</span>');
         return `<button class="${cls}" data-choice="${i}" ${q.checked || tried.has(i) ? 'disabled' : ''}>
             <span class="choice-text" data-read>${nl(c)}</span>${mark}
           </button>`;
@@ -713,7 +499,7 @@ function screenQuiz() {
   else if (hintAllowed && !q.checked) {
     help = q.hintOpen
       ? `<div class="hint-box"><span class="hint-icon" aria-hidden="true">💡</span><p data-read>${nl(item.hint)}</p></div>`
-      : `<button class="btn-hint" data-hint>💡 힌트</button>`;
+      : `<button class="btn-hint" data-hint>힌트</button>`;
   }
 
   let feedback = '';
@@ -732,6 +518,7 @@ function screenQuiz() {
   }
 
   return `
+    <div class="fbg fbg-view" data-bg="meadow" aria-hidden="true"></div>
     <div class="scene quiz-scene">
       <header class="scene-top">
         <button class="round-btn" data-back="${q.backTo}" aria-label="그만하고 돌아가기">‹</button>
@@ -995,24 +782,6 @@ const GAMES = [
   { id: 'dodgeball', icon: '🤾', name: '피구 뺄셈', desc: '남은 친구 세기', src: 'games/dodgeball/index.html' },
 ];
 
-function screenGames() {
-  return `
-    ${hud({ title: `${pxIcon('game')} 게임`, rightPills: [pill('fire', pxIcon('fire'), Store.streak())], logout: true })}
-    <main class="page">
-      <h2 class="games-ask">무슨 게임을 해볼까요?</h2>
-      <div class="game-grid">
-        ${GAMES.map(
-          (g) => `<button class="game-card" data-game="${g.id}">
-            <span class="game-thumb" aria-hidden="true">${g.icon}</span>
-            <strong>${g.name}</strong>
-            <small>${g.desc}</small>
-          </button>`
-        ).join('')}
-        <div class="game-card empty" aria-hidden="true"><span class="game-thumb">⋯</span><strong>더 생겨요</strong></div>
-      </div>
-    </main>
-    ${tabbar('games')}`;
-}
 
 function screenPlay() {
   const g = GAMES.find((x) => x.id === State.gameId);
@@ -1242,6 +1011,7 @@ function render() {
     games: screenGames,
     play: screenPlay,
     rest: screenRest,
+    loading: screenLoading,
     intro: screenIntro,
     settings: screenSettings,
     chat: () => Chat.listView(),
@@ -1255,8 +1025,12 @@ function render() {
 
   Profile.apply();
   app.innerHTML = (views[State.screen] || screenHome)();
-  app.className = `screen-${State.screen}`;
+  app.className = `screen-${State.screen}${FIGMA_SCREENS.includes(State.screen) ? ' figma' : ''}`;
   Layout.update();
+  applySkin();
+  Stage.paint();
+  loadingAfterRender();
+  if (State.screen === 'garden') ScrollGrass.mount();
   afterQuizRender();
   introAfterRender();
   if (typeof FX !== 'undefined') {
@@ -1281,6 +1055,13 @@ app.addEventListener('click', async (ev) => {
   // 팝업 바깥(어두운 배경)을 누르면 닫혀요.
   if (ev.target.hasAttribute && ev.target.hasAttribute('data-backdrop')) return setSheet(null);
 
+  // 펼친 학년 · 학기 메뉴는 바깥을 누르면 닫혀요.
+  if (State.menu && !ev.target.closest('.f-menu, [data-menu]')) {
+    State.menu = null;
+    render();
+    if (!ev.target.closest('[data-grade],[data-term]')) return;
+  }
+
   // 소리 도움 모드: 글자를 누르면 다시 읽어 줘요.
   if (Profile.mode().tapRead) {
     const r = ev.target.closest('[data-read]');
@@ -1292,7 +1073,7 @@ app.addEventListener('click', async (ev) => {
       '[data-sub],[data-max],[data-max-locked],[data-start-max],[data-close-sheet],[data-lesson],[data-start-sub],' +
       '[data-choice],[data-submit],[data-next],[data-hint],[data-logout],[data-game],[data-chat-with],' +
       '[data-student],[data-add-open],[data-add-cancel],[data-remove-student],[data-range],' +
-      '[data-rep],[data-key],[data-read-problem],[data-rest-now]'
+      '[data-rep],[data-key],[data-read-problem],[data-rest-now],[data-menu],[data-term]'
   );
   if (!el) return;
 
@@ -1342,6 +1123,11 @@ app.addEventListener('click', async (ev) => {
   // --- 과목 · 학년 · 단원 ---
   if (el.dataset.subject) return go('garden', { subject: el.dataset.subject });
   if (el.dataset.grade) return go('garden', { grade: Number(el.dataset.grade) });
+  if (el.dataset.term) return go('garden', { term: Number(el.dataset.term) });
+  if (el.dataset.menu) {
+    State.menu = State.menu === el.dataset.menu ? null : el.dataset.menu;
+    return render();
+  }
   if (el.dataset.unit) return go('unit', { chapterId: el.dataset.unit });
 
   // 물 주기(복습): 시든 식물을 원래대로
@@ -1526,7 +1312,7 @@ app.addEventListener('submit', async (ev) => {
 function loadFx() {
   const add = () => {
     const sc = document.createElement('script');
-    sc.src = 'js/fx.js?v=21';
+    sc.src = 'js/fx.js?v=22';
     sc.async = true;
     document.body.appendChild(sc);
   };
