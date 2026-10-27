@@ -623,7 +623,7 @@ const Chat = {
     if (!list) return;
     const empty = list.querySelector('.chat-empty');
     if (empty) empty.remove();
-    list.insertAdjacentHTML('beforeend', msgs.map((m) => this._msgHtml(m)).join(''));
+    list.insertAdjacentHTML('beforeend', msgs.map((m) => this._msgHtml(m).replace('class="chat-msg', 'class="chat-msg new')).join(''));
     this._scrollDown();
   },
 
@@ -638,7 +638,7 @@ const Chat = {
     el.textContent = this._onlineHtml(f);
     el.classList.toggle('off', !f.online);
     const send = document.querySelector('[data-chat-send]');
-    if (send) send.disabled = !f.online || !this.pick;
+    if (send) send.disabled = !f.online || !this._outgoing();
   },
 
   // 고른 것 · 선택 패널 · 탭 (피그마 '문구 선택' · '이모지 선택' · '미리보기')
@@ -669,13 +669,23 @@ const Chat = {
     </div>`;
   },
 
+  /**
+   * 글 칸: 직접 쳐도 되고, 패널에서 문구를 고르면 칸에 채워져요. 그림을 고르면 칸에 그림이 보여요.
+   * (쓰는 동안에는 화면을 다시 그리지 않아요. 글자가 지워지거나 키보드가 닫히지 않게)
+   */
   _fieldHtml() {
-    if (!this.pick) return '<span class="field-hint t-body">보낼 말을 골라요</span>';
-    if (this.pick.kind === 'emoji') {
-      const e = CHAT_EMOJIS.find((x) => x.id === this.pick.value);
-      return `<img src="${e.src}" alt="${e.label}" width="${e.w}" height="${e.h}">`;
-    }
-    return `<span class="t-body">${esc(this.pick.value)}</span>`;
+    const e = this.pick && this.pick.kind === 'emoji' ? CHAT_EMOJIS.find((x) => x.id === this.pick.value) : null;
+    const text = this.pick && this.pick.kind !== 'emoji' ? this.pick.value : '';
+    return `${e ? `<img class="field-emoji" src="${e.src}" alt="${e.label}" width="${e.w}" height="${e.h}">` : ''}
+      <input id="chat-input" class="chat-type t-body" type="text" maxlength="${CHAT_MAX_LEN}" enterkeyhint="send" autocomplete="off"
+        placeholder="${e ? '' : '보낼 말을 쓰거나 골라요'}" aria-label="보낼 말" value="${esc(text)}">`;
+  },
+
+  /** 보낼 것 (글 · 고른 문구 · 그림) */
+  _outgoing() {
+    if (!this.pick) return '';
+    if (this.pick.kind === 'emoji') return `:${this.pick.value}:`;
+    return String(this.pick.value || '').trim();
   },
 
   _panelHtml() {
@@ -718,12 +728,26 @@ const Chat = {
       </main>
       <div class="fixed-bottom chat-foot"><div class="zoomed">
         <div class="chat-input">
-          <button class="f-btn chat-field px px-badge px-white" data-chat-open aria-label="보낼 말 고르기" aria-expanded="${this.panel}">${this._fieldHtml()}</button>
-          <button class="f-btn chat-send px px-plate px-primary" data-chat-send aria-label="보내기" ${f.online && this.pick ? '' : 'disabled'}><img src="assets/ui/icon-paper-plane.svg" alt="" width="33" height="24"></button>
+          <div class="chat-field px px-badge px-white">
+            ${this._fieldHtml()}
+            <button class="f-btn chat-open" data-chat-open aria-label="문구 · 그림 고르기" aria-expanded="${this.panel}">${this.panel ? '⌨️' : '😊'}</button>
+          </div>
+          <button class="f-btn chat-send px px-plate px-primary" data-chat-send aria-label="보내기" ${f.online && this._outgoing() ? '' : 'disabled'}><img src="assets/ui/icon-paper-plane.svg" alt="" width="33" height="24"></button>
         </div>
         ${this.panel ? this._panelHtml() : '<div class="chat-home-space"></div>'}
       </div></div>
       ${showRules ? `<div class="fixed-top" style="z-index:30;bottom:0"><div class="zoomed" style="height:844px">${this._rulesHtml()}</div></div>` : ''}`;
+  },
+
+  /** 글 칸 · 고른 것을 보내요. 보내면 칸을 비우고 패널을 닫아요. */
+  sendPicked() {
+    const text = this._outgoing();
+    if (!text) return false;
+    if (!this.send(text)) return false;
+    this.pick = null;
+    this.panel = false;
+    render();
+    return true;
   },
 
   send(raw) {
@@ -795,20 +819,28 @@ document.getElementById('app').addEventListener('click', (ev) => {
       return;
     }
     const send = ev.target.closest('[data-chat-send]');
-    if (send && !send.disabled && Chat.pick) {
-      const text = Chat.pick.kind === 'emoji' ? `:${Chat.pick.value}:` : Chat.pick.value;
-      if (Chat.send(text)) {
-        Chat.pick = null;
-        Chat.panel = false;
-        render();
-      }
-      return;
-    }
+    if (send && !send.disabled) return Chat.sendPicked();
   }
   if (ev.target.closest('[data-chat-topic]')) {
     const el = document.getElementById('chat-topic');
     if (el) el.textContent = ChatBot.next();
   }
+});
+
+// 글 칸에 쓰기: 다시 그리지 않고 보낼 것 · 보내기 버튼만 바꿔요. Enter로도 보내요.
+document.getElementById('app').addEventListener('input', (ev) => {
+  if (ev.target.id !== 'chat-input') return;
+  Chat.pick = ev.target.value ? { kind: 'text', value: ev.target.value } : null;
+  const emoji = document.querySelector('.field-emoji');
+  if (emoji) emoji.remove();
+  ev.target.placeholder = '보낼 말을 쓰거나 골라요';
+  Chat._paintOnline();
+});
+document.getElementById('app').addEventListener('keydown', (ev) => {
+  if (ev.target.id !== 'chat-input' || ev.key !== 'Enter' || ev.isComposing) return;
+  ev.preventDefault();
+  const send = document.querySelector('[data-chat-send]');
+  if (send && !send.disabled) Chat.sendPicked();
 });
 
 ChatNet.listen((kind) => Chat.onRemote(kind));

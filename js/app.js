@@ -1275,7 +1275,7 @@ app.addEventListener('submit', async (ev) => {
 function loadFx() {
   const add = () => {
     const sc = document.createElement('script');
-    sc.src = 'js/fx.js?v=25';
+    sc.src = 'js/fx.js?v=27';
     sc.async = true;
     document.body.appendChild(sc);
   };
