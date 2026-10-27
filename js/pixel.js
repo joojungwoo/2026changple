@@ -324,3 +324,15 @@ function pixelRiver() {
   }
   return `<svg class="px world-river" viewBox="0 0 ${COLS} ${ROWS}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${pxRects(rows)}</svg>`;
 }
+
+/**
+ * 살아 있는 새싹 친구: 숨쉬기(살짝 커졌다 작아짐) + 눈 깜빡임
+ * 눈 위에 잎 색 눈꺼풀을 겹쳐 두고, CSS(.buddy-alive)로 가끔 보이게 해요.
+ * 움직임은 소개 화면 · 쉬는 화면 같은 곳에서만 쓰고, 문제 푸는 화면에서는 꺼져 있어요.
+ */
+function sproutBuddyAlive(cls) {
+  const lid = (x, fill) => `<rect x="${x}" y="3" width="3" height="2" fill="${fill}"/><rect x="${x}" y="4" width="3" height="1" fill="${PX_PAL.k}"/>`;
+  return `<svg class="px buddy-alive ${cls || ''}" viewBox="0 0 ${PX_BUDDY[0].length} ${PX_BUDDY.length}" shape-rendering="crispEdges" aria-hidden="true">
+    <g class="buddy-body">${pxRects(PX_BUDDY)}<g class="buddy-lids">${lid(3, PX_PAL.l)}${lid(14, PX_PAL.g)}</g></g>
+  </svg>`;
+}

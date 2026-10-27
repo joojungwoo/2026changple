@@ -47,7 +47,7 @@ const State = {
 };
 
 /** 로그인 없이 볼 수 있는 화면 */
-const PUBLIC_SCREENS = ['splash', 'login', 'signup'];
+const PUBLIC_SCREENS = ['splash', 'intro', 'login', 'signup'];
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
 
@@ -73,7 +73,10 @@ function toast(msg, kind) {
 }
 
 function go(screen, patch) {
+  // 종이 넘김 테마: 지금 화면을 본떠서 책장처럼 넘겨요. (fx.js가 아직 안 왔으면 그냥 바뀌어요)
+  if (typeof FX !== 'undefined') FX.beforeNav(State.screen, screen);
   State.sheet = null;
+  Speech.stop();
   Object.assign(State, patch || {});
   State.screen = screen;
   render();
@@ -93,6 +96,30 @@ function safely(fn) {
   } catch (e) {
     toast(e.message || '문제가 생겼어요. 다시 시도해 주세요.', 'error');
     return { ok: false, error: e };
+  }
+}
+
+/** 서버를 기다리는 저장 동작용 safely */
+async function safelyAsync(fn) {
+  try {
+    return { ok: true, value: await fn() };
+  } catch (e) {
+    toast(e.message || '문제가 생겼어요. 다시 시도해 주세요.', 'error');
+    return { ok: false, error: e };
+  }
+}
+
+/** 폼을 보내는 동안 버튼을 잠가요. (두 번 눌러도 한 번만 가요) */
+async function busy(form, fn) {
+  const btn = form.querySelector('[type="submit"]');
+  if (form.dataset.busy) return;
+  form.dataset.busy = '1';
+  if (btn) btn.disabled = true;
+  try {
+    return await fn();
+  } finally {
+    delete form.dataset.busy;
+    if (btn && btn.isConnected) btn.disabled = false;
   }
 }
 
@@ -116,19 +143,20 @@ function waterCells(view) {
 
 /**
  * 상단 HUD
- * @param {object} o { back, name, title, rightPills[], logout }
+ * @param {object} o { back, name, avatar, title, rightPills[], logout, settings }
  */
 function hud(o) {
   const opts = o || {};
   let lead = `<span class="icon-btn" aria-hidden="true">${pxIcon('sprout')}</span>`;
   if (opts.back) lead = `<button class="icon-btn" data-back="${opts.back}" aria-label="뒤로 가기">←</button>`;
-  else if (opts.name) lead = `<span class="hud-avatar" aria-hidden="true"><span>${esc([...opts.name][0] || '🌱')}</span></span>`;
+  else if (opts.name) lead = `<span class="hud-avatar" aria-hidden="true"><span>${esc(opts.avatar || [...opts.name][0] || '🌱')}</span></span>`;
   return `
     <header class="hud">
       ${lead}
       ${opts.title ? `<h1 class="hud-title">${opts.title}</h1>` : ''}
       <span class="hud-spacer"></span>
       ${(opts.rightPills || []).join('')}
+      ${opts.settings ? `<button class="icon-btn hold-btn" data-settings-hold aria-label="설정 (보호자가 3초 동안 누르기)"><span aria-hidden="true">⚙️</span><i class="hold-fill" aria-hidden="true"></i></button>` : ''}
       ${opts.logout ? `<button class="icon-btn" data-logout aria-label="로그아웃">${pxIcon('door')}</button>` : ''}
     </header>`;
 }
@@ -172,8 +200,10 @@ let splashTimer;
 function leaveSplash() {
   clearTimeout(splashTimer);
   if (State.screen !== 'splash') return;
+  // 서버에서 예전 로그인을 확인하는 중이면 끝날 때까지 기다려요.
+  if (!Cloud.restored) return Cloud.ready.then(() => ((Cloud.restored = true), safely(() => Store.syncGarden()), leaveSplash()));
   const user = Store.currentUser();
-  if (!user) return go('login');
+  if (!user) return go('intro');
   go(homeOf(user), { grade: user.grade });
 }
 
@@ -288,9 +318,11 @@ function screenHome() {
 
   return `
     ${hud({
-      name: user.name,
-      title: esc(user.name),
+      name: user.nick || user.name,
+      avatar: user.avatar,
+      title: esc(user.nick || user.name),
       rightPills: [pill('ok', pxIcon('pencil'), t.solved), pill('fire', pxIcon('fire'), t.streak)],
+      settings: true,
       logout: true,
     })}
     <main class="page flush">
@@ -483,8 +515,12 @@ function screenLesson() {
     </div>`;
   const others = ch.concept.cards.map((c, i) => (i === s.idx ? '' : card(c, i))).join('');
 
+  // 그림 띠: 개념 보기 → 문제 풀기 → (친구 돕기) → 끝
+  const m = Profile.mode();
+  const plan = sessionPlan('sub', { focus: !!m.focus, concept: true, friend: !m.focus && s.questions.some((q) => Friend.attempt(Problem.from(q))) });
   return `
     ${hud({ back: 'unit', title: `${s.no} ${esc(s.title)}` })}
+    ${scheduleStrip(plan)}
     <main class="page">
       <section class="concept-hero ${subject.theme}">
         <div class="concept-emoji">${ch.icon}</div>
@@ -510,6 +546,18 @@ function startQuiz(mode, questions, opts) {
     return;
   }
   const o = opts || {};
+  const m = Profile.mode();
+  let list = questions;
+  // 단시간 집중 모드: 아직 안 푼 문제부터 몇 개만 풀어요. 나머지는 다음 번에 이어서 해요.
+  if (m.focus && mode !== 'max' && list.length > FOCUS_COUNT) {
+    const solved = new Set(Store.getData().records.map((r) => r.qid));
+    list = [...list.filter((q) => !solved.has(q.id)), ...list.filter((q) => solved.has(q.id))].slice(0, FOCUS_COUNT);
+  }
+  // 틀리는 친구: 계산 문제가 있으면 끝에 '친구 돕기' 한 문제를 붙여요. (집중 모드 · MAX는 빼요)
+  const friend = !m.focus && mode !== 'max' ? Friend.pick(list) : null;
+  if (friend) list = [...list, friend];
+  // 그림 띠의 단계: 개념을 보고 왔는지, 친구 돕기가 있는지에 따라 달라요.
+  const plan = sessionPlan(mode, { focus: !!m.focus, concept: State.screen === 'lesson', friend: !!friend });
   go('quiz', {
     chapterId: o.chapterId,
     quiz: {
@@ -518,19 +566,41 @@ function startQuiz(mode, questions, opts) {
       chapterId: o.chapterId,
       sub: o.sub !== undefined ? o.sub : null,
       backTo: o.backTo || 'unit',
-      questions,
+      questions: list,
+      plan,
       index: 0,
-      selected: null,
-      checked: false,
-      correct: false,
-      hintOpen: false,
-      hintUsed: false,
       results: [],
       startedAt: Date.now(),
+      // 단시간 집중 모드: 이 시간이 지나면 지금 문제까지만 풀고 쉬어요. (화면에 시계는 없어요)
+      focusUntil: m.focus ? Date.now() + Profile.get().focusMin * 60000 : null,
       before: Store.chapterGarden(o.chapterId),
       outcome: null,
+      rep: null, // 문제 풀이 중에 바꾼 표현 방식 (없으면 프로필의 기본값)
+      ...freshQuestionState(),
     },
   });
+}
+
+/** 문제 하나를 시작할 때의 상태 */
+function freshQuestionState() {
+  return {
+    selected: null, // 터치 선택: 고른 보기 번호
+    typed: '', // 숫자패드: 쓰고 있는 수
+    tries: [], // 한 번 틀린 답 (그 다음에 다시 고를 수 있어요)
+    why: null, // 틀린 이유 도움말
+    checked: false,
+    correct: false,
+    hintOpen: false,
+    hintUsed: false,
+    shownAt: Date.now(),
+    readKey: null, // 소리 도움 모드: 이미 읽어 준 화면
+    restAsked: false, // 단시간 집중 모드: "잠깐 쉴까?"를 물어봤는지
+    friendStage: 'look', // 친구 돕기: look 틀린 곳 찾기 → fix 바른 답 쓰기
+    friendSay: null,
+    friendOk: 0,
+    ink: null, // 손글씨 (pencil.js)
+    inkSave: null,
+  };
 }
 
 function quizTitle(q) {
@@ -548,14 +618,118 @@ function quizCells(q) {
   </div>`;
 }
 
-function screenQuiz() {
+/**
+ * 지금 문제의 문제 데이터 · 표현 방식 · 입력 방식
+ *  - 표현: 문제 풀이 중에 바꾼 것 → 프로필 기본값 → 숫자(글자)
+ *  - 입력: 학습 모드의 입력 → 안 되는 문제면 숫자패드 → 터치 선택
+ */
+function quizParts() {
   const q = State.quiz;
   const item = q.questions[q.index];
+  const p = Problem.from(item);
+  const rep = pickRep(p, q.rep || Profile.get().rep);
+  const input = q.mode === 'max' && Profile.mode().input === 'pencil' ? pickInput(p, 'pencil') : pickInput(p, Profile.mode().input);
+  return { q, item, p, rep, input };
+}
+
+/** 지금 입력된 답 (없으면 null) */
+function quizResponse(parts) {
+  const { q, input } = parts;
+  if (input === 'choice') return q.selected === null ? null : { kind: 'choice', index: q.selected };
+  return q.typed === '' ? null : { kind: 'number', value: Number(q.typed) };
+}
+
+function repToggle(p, rep) {
+  const ids = repsFor(p);
+  if (ids.length < 2) return '';
+  return `<div class="rep-toggle" role="group" aria-label="보는 방법">
+    ${ids.map((id) => `<button type="button" class="${id === rep ? 'on' : ''}" data-rep="${id}" aria-pressed="${id === rep}">
+        <span aria-hidden="true">${REPS[id].icon(p)}</span>${REPS[id].label(p)}</button>`).join('')}
+  </div>`;
+}
+
+/** 답을 내는 곳: 터치 선택 */
+function inputChoice(parts) {
+  const { q, item } = parts;
+  const tried = new Set(q.tries.map((t) => t.index));
+  // 선택지가 모두 짧으면 두 칸씩 크게, 길면 한 줄에 하나씩 보여 줘요.
+  const grid = item.choices.every((c) => [...c].length <= 9 && c.indexOf('\n') < 0);
+  return `<div class="choices ${grid ? 'grid' : ''}">
+    ${item.choices
+      .map((c, i) => {
+        let cls = `choice c${i % 4}`;
+        let mark = '';
+        if (q.checked) {
+          if (i === item.answer) (cls += ' correct'), (mark = '<span class="choice-mark">⭐ 정답</span>');
+          else cls += ' dim';
+        } else if (tried.has(i)) (cls += ' tried'), (mark = '<span class="choice-mark">🤔 다시</span>');
+        else if (q.selected === i) (cls += ' selected'), (mark = '<span class="choice-mark">👆</span>');
+        return `<button class="${cls}" data-choice="${i}" ${q.checked || tried.has(i) ? 'disabled' : ''}>
+            <span class="choice-text" data-read>${nl(c)}</span>${mark}
+          </button>`;
+      })
+      .join('')}
+  </div>`;
+}
+
+/** 답을 내는 곳: 숫자패드 */
+function inputNumpad(parts) {
+  const { q, p } = parts;
+  const unit = p.answer.unit ? `<span class="np-unit">${esc(p.answer.unit)}</span>` : '';
+  const shown = q.checked ? String(p.answer.value) : q.typed;
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'];
+  const label = { clear: '처음부터', back: '⌫ 지우기' };
+  return `<div class="numpad">
+    <div class="np-display ${q.checked ? 'done' : ''}" aria-live="polite">
+      <span class="np-value">${shown ? pvNum(shown) : '<span class="np-empty">?</span>'}</span>${unit}
+      ${q.checked ? '<span class="np-mark">⭐ 정답</span>' : ''}
+    </div>
+    ${q.tries.length && !q.checked ? `<p class="np-tried">🤔 써 본 답: ${q.tries.map((t) => esc(responseText(p, t))).join(', ')}</p>` : ''}
+    ${
+      q.checked
+        ? ''
+        : `<div class="np-keys">${keys
+            .map((k) => `<button type="button" class="np-key ${label[k] ? 'fn' : ''}" data-key="${k}" aria-label="${label[k] || k}">${label[k] || k}</button>`)
+            .join('')}</div>`
+    }
+  </div>`;
+}
+
+function screenQuiz() {
+  const parts = quizParts();
+  const { q, item, p, rep, input } = parts;
   const total = q.questions.length;
   // MAX는 이미 배운 내용을 확인하는 시험이라 힌트를 숨겨요.
   const hintAllowed = q.mode !== 'max' && !!item.hint;
-  // 선택지가 모두 짧으면 두 칸씩 크게, 길면 한 줄에 하나씩 보여 줘요.
-  const grid = item.choices.every((c) => [...c].length <= 9 && c.indexOf('\n') < 0);
+  const answerText = p.answer.kind === 'number' ? `${p.answer.value}${p.answer.unit}` : item.choices[item.answer];
+  const ready = input === 'pencil' ? !!(q.ink && q.ink.strokes.length) && !q.ink.reading : !!quizResponse(parts);
+  const readyLabel = input === 'pencil' ? '다 썼어요!' : '답 고르기 완료!';
+  const waitLabel = input === 'choice' ? '답을 골라 주세요' : '답을 써 주세요';
+
+  const friendLook = item.friend && !q.checked && q.friendStage === 'look';
+  let help = '';
+  if (item.friend && !q.checked) help = friendLook ? friendLookHtml(parts) : friendFixHtml(parts);
+  else if (q.why && !q.checked) help = `<div class="hint-box why" role="status"><span class="hint-icon" aria-hidden="true">🤔</span><p data-read>${esc(q.why)}</p></div>`;
+  else if (hintAllowed && !q.checked) {
+    help = q.hintOpen
+      ? `<div class="hint-box"><span class="hint-icon" aria-hidden="true">💡</span><p data-read>${nl(item.hint)}</p></div>`
+      : `<button class="btn-hint" data-hint>💡 힌트</button>`;
+  }
+
+  let feedback = '';
+  if (q.checked) {
+    let head = q.correct ? (q.tries.length ? '🎉 이번에는 맞혔어요!' : '🎉 정답이에요!') : '💪 괜찮아요, 같이 봐요';
+    if (item.friend) head = q.correct ? `${friendAvatar('happy')} 고마워! 이제 알겠다! 🎉` : `${friendAvatar('think')} 우리 같이 다시 보자!`;
+    feedback = `<section class="feedback ${q.correct ? '' : 'no'}">
+        <div class="fb-head">${head}</div>
+        ${q.correct ? '' : `<p class="fb-answer">⭐ 정답은 <b>${nl(answerText)}</b></p>`}
+        <div class="fb-body">
+          <strong>📖 풀이</strong>
+          <p data-read>${nl(item.solution)}</p>
+        </div>
+        ${!q.results[q.results.length - 1].correct && q.mode !== 'max' ? `<div class="fb-note">${pxIcon('drop')} 이 문제는 다음에 물 줄 때 다시 만나요!</div>` : ''}
+      </section>`;
+  }
 
   return `
     <div class="scene quiz-scene">
@@ -563,86 +737,88 @@ function screenQuiz() {
         <button class="round-btn" data-back="${q.backTo}" aria-label="그만하고 돌아가기">‹</button>
         ${quizCells(q)}
       </header>
+      ${scheduleStrip(q.plan)}
       <p class="quiz-title">${quizTitle(q)} · ${q.index + 1} / ${total}</p>
+      ${repToggle(p, rep)}
 
-      <section class="question-card">
-        ${item.visual ? `<div class="visual">${nl(item.visual)}</div>` : ''}
-        <p class="question-text">${nl(item.text)}</p>
-        ${item.steps ? `<ol class="steps">${item.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
-      </section>
+      <div class="quiz-body">
+        <section class="question-card quiz-problem rep-${rep}">
+          ${REPS[rep].render(p, { checked: q.checked })}
+        </section>
 
-      <main class="scene-ground">
-        ${
-          !hintAllowed
-            ? ''
-            : q.hintOpen
-            ? `<div class="hint-box"><span class="hint-icon">💡</span><p>${nl(item.hint)}</p></div>`
-            : `<button class="btn-hint" data-hint>💡 힌트</button>`
-        }
-
-        <div class="choices ${grid ? 'grid' : ''}">
-          ${item.choices
-            .map((c, i) => {
-              let cls = `choice c${i % 4}`;
-              if (q.checked) {
-                if (i === item.answer) cls += ' correct';
-                else if (i === q.selected) cls += ' wrong';
-                else cls += ' dim';
-              } else if (q.selected === i) cls += ' selected';
-              const mark = q.checked ? (i === item.answer ? '⭕' : i === q.selected ? '❌' : '') : q.selected === i ? '👆' : '';
-              return `<button class="${cls}" data-choice="${i}" ${q.checked ? 'disabled' : ''}>
-                        <span class="choice-text">${nl(c)}</span>
-                        ${mark ? `<span class="choice-mark">${mark}</span>` : ''}
-                      </button>`;
-            })
-            .join('')}
-        </div>
-
-        ${
-          q.checked
-            ? `<section class="feedback ${q.correct ? '' : 'no'}">
-                <div class="fb-head">${q.correct ? '🎉 정답이에요!' : '💪 괜찮아요, 같이 봐요'}</div>
-                <div class="fb-body">
-                  <strong>📖 풀이</strong>
-                  <p>${nl(item.solution)}</p>
-                </div>
-                ${!q.correct && q.mode !== 'max' ? `<div class="fb-note">${pxIcon('drop')} 이 문제는 다음에 물 줄 때 다시 만나요!</div>` : ''}
-              </section>
-              <button class="btn btn-primary btn-lg btn-block" data-next>
-                ${q.index + 1 < total ? '다음 문제 →' : '마치기 🎉'}
-              </button>`
-            : `<button class="btn btn-primary btn-lg btn-block" data-submit ${q.selected === null ? 'disabled' : ''}>
-                ${q.selected === null ? '답을 골라 주세요' : '답 고르기 완료!'}
-              </button>`
-        }
-      </main>
-    </div>`;
+        <main class="scene-ground quiz-work">
+          ${help}
+          ${friendLook ? '' : input === 'pencil' ? inputPencil(parts) : input === 'numpad' ? inputNumpad(parts) : inputChoice(parts)}
+          ${feedback}
+          ${
+            friendLook
+              ? ''
+              : q.checked
+              ? `<button class="btn btn-primary btn-lg btn-block" data-next>${q.index + 1 < total ? '다음 문제 →' : '마치기 🎉'}</button>`
+              : `<button class="btn btn-primary btn-lg btn-block" data-submit ${ready ? '' : 'disabled'}>${ready ? readyLabel : waitLabel}</button>`
+          }
+        </main>
+      </div>
+    </div>
+    ${
+      State.sheet && State.sheet.kind === 'rest-ask'
+        ? `<div class="overlay" data-backdrop><section class="sheet" role="dialog" aria-modal="true" aria-label="잠깐 쉴까요?">
+            <div class="rest-buddy small" aria-hidden="true">${sproutLogo()}</div>
+            <h2>잠깐 쉴까?</h2>
+            <p class="sheet-sub">조금 쉬었다 하면 더 잘 보여요.</p>
+            <div class="btn-col">
+              <button class="btn btn-primary btn-lg" data-rest-now>쉬기</button>
+              <button class="btn btn-lg" data-close-sheet>계속 풀기</button>
+            </div>
+          </section></div>`
+        : ''
+    }`;
 }
 
+/**
+ * 답 확인
+ *  - 첫 답만 학습 기록에 남겨요. (힌트 없이 스스로 푼 비율을 지도자 리포트에 보여 주려고)
+ *  - 틀리면 정답을 바로 보여 주지 않고, 고른 답에 맞는 도움말을 보여 준 뒤 한 번 더 고르게 해요.
+ *    MAX는 시험이라 다시 고르지 않아요. 두 번째에도 틀리면 정답과 풀이를 같이 봐요.
+ */
 function submitAnswer() {
-  const q = State.quiz;
-  const item = q.questions[q.index];
-  if (q.selected === null || q.checked) return;
+  const parts = quizParts();
+  const { q, item, p, rep, input } = parts;
+  const res = quizResponse(parts);
+  if (!res || q.checked) return;
 
-  const correct = q.selected === item.answer;
-  const res = safely(() => Store.recordAnswer(item, correct, { mode: q.mode, hint: q.hintUsed, sess: q.sess }));
-  if (!res.ok) return; // 저장 실패 시 진행하지 않음
+  const correct = judge(p, res);
+  const first = q.tries.length === 0;
+  if (first) {
+    const rec = { mode: item.friend ? 'friend' : q.mode, hint: q.hintUsed, sess: q.sess, rep, input, ms: Date.now() - q.shownAt };
+    const saved = safely(() => Store.recordAnswer(item, correct, rec));
+    if (!saved.ok) return; // 저장 실패 시 진행하지 않음
+    q.results.push({ qid: item.id, correct });
+  }
+  if (q.inkSave) {
+    safely(() => Store.saveInk({ qid: item.id, at: Date.now(), correct, first, ...q.inkSave }));
+    q.inkSave = null;
+  }
 
+  if (!correct && first && q.mode !== 'max') {
+    q.tries.push(res);
+    q.why = whyWrong(p, res);
+    q.selected = null;
+    q.typed = '';
+    if (q.ink) q.ink = { ...freshInk(), penSeen: q.ink.penSeen };
+    return render();
+  }
   q.checked = true;
   q.correct = correct;
-  q.results.push({ qid: item.id, correct });
   render();
 }
 
 function nextQuestion() {
   const q = State.quiz;
-  if (q.index + 1 < q.questions.length) {
-    q.index += 1;
-    q.selected = null;
-    q.checked = false;
-    q.correct = false;
-    q.hintOpen = false;
-    q.hintUsed = false;
+  // 단시간 집중 모드: 정해 둔 시간이 지났으면 여기까지 하고 쉬어요.
+  const tired = q.focusUntil && Date.now() > q.focusUntil;
+  if (q.index + 1 < q.questions.length && !tired) {
+    Object.assign(q, freshQuestionState(), { index: q.index + 1 });
     render();
     window.scrollTo({ top: 0 });
     return;
@@ -650,8 +826,67 @@ function nextQuestion() {
   // 세션 끝: 텃밭에 반영
   const res = safely(() => Store.finishSession({ mode: q.mode, chapterId: q.chapterId, sub: q.sub, results: q.results }));
   if (res.ok) q.outcome = res.value;
-  go('result');
+  go(q.focusUntil ? 'rest' : 'result');
 }
+
+/** 단시간 집중 모드: 끝나면 쉬는 화면 → 결과 */
+function screenRest() {
+  return `
+    <div class="scene rest-scene">
+      ${scheduleStrip(State.quiz.plan)}
+      <main class="rest-card">
+        <div class="rest-buddy" aria-hidden="true">${sproutLogo()}</div>
+        <h1>잘했어요! 잠깐 쉬어요 🌿</h1>
+        <p>물 한 모금 마시고, 기지개를 쭉 켜 봐요.</p>
+        <button class="btn btn-primary btn-lg btn-block" data-go="result">다 쉬었어요</button>
+      </main>
+    </div>`;
+}
+
+/** 소리 도움 모드: 문제가 바뀌면 문제 → 보기 차례로 읽어 줘요. */
+function readProblem() {
+  const parts = [];
+  const add = (el) => el && parts.push({ text: el.innerText || el.textContent, el });
+  const card = document.querySelector('.quiz-problem');
+  if (!card) return;
+  const hidden = card.querySelector('.listen-text:not([open])');
+  card.querySelectorAll('.question-text, .steps li').forEach((el) => {
+    if (hidden && hidden.contains(el)) parts.push({ text: el.textContent, el: card.querySelector('[data-read-problem]') });
+    else add(el);
+  });
+  document.querySelectorAll('.quiz-work .choice:not(:disabled) .choice-text').forEach((el, i) => parts.push({ text: `${i + 1}번, ${el.textContent}`, el }));
+  Speech.read(parts);
+}
+
+function afterQuizRender() {
+  if (State.screen !== 'quiz') return;
+  Pencil.mount();
+  const q = State.quiz;
+  const key = `${q.index}:${q.tries.length}:${q.checked}`;
+  if (!Profile.mode().autoRead || q.readKey === key) return;
+  q.readKey = key;
+  if (q.checked) {
+    const sol = document.querySelector('.feedback .fb-body p');
+    if (sol) Speech.read([{ text: document.querySelector('.fb-head').textContent, el: null }, { text: sol.textContent, el: sol }]);
+  } else if (q.why) {
+    const why = document.querySelector('.hint-box.why p');
+    if (why) Speech.readEl(why);
+  } else readProblem();
+}
+
+/** 단시간 집중 모드: 한 문제에 평소보다 오래 머물면 먼저 "잠깐 쉴까?"를 물어봐요. */
+function usualAnswerMs() {
+  const ms = Store.getData().records.slice(-30).map((r) => r.ms).filter((x) => x > 0).sort((a, b) => a - b);
+  return ms.length >= 5 ? ms[Math.floor(ms.length / 2)] : 40000;
+}
+
+setInterval(() => {
+  const q = State.quiz;
+  if (State.screen !== 'quiz' || !q || q.checked || q.restAsked || !q.focusUntil || State.sheet) return;
+  if (Date.now() - q.shownAt < Math.max(45000, usualAnswerMs() * 2.5)) return;
+  q.restAsked = true;
+  setSheet({ kind: 'rest-ask' });
+}, 5000);
 
 /* ========================== 8. 결과 화면 ========================== */
 
@@ -707,6 +942,7 @@ function screenResult() {
   }
 
   return `
+    ${q.plan ? scheduleStrip(q.plan) : ''}
     <main class="page flush result">
       <span class="confetti" style="top:12px;left:26px">🎊</span>
       <span class="confetti" style="top:30px;right:34px">✨</span>
@@ -988,7 +1224,9 @@ function render() {
   if (State.screen === 'garden' && !State.subject) State.screen = 'home';
   if (['quiz', 'result'].includes(State.screen) && !State.quiz) State.screen = 'home';
   if (State.screen === 'play' && !GAMES.some((g) => g.id === State.gameId)) State.screen = 'games';
-  if (State.screen === 'chatroom' && !Store.allStudents().some((s) => s.id === State.chatWith)) State.screen = 'chat';
+  if (State.screen === 'chatroom' && !Chat.knows(State.chatWith)) State.screen = 'chat';
+  if (['gate', 'settings', 'rest'].includes(State.screen) && (!user || user.role !== 'student')) State.screen = user ? homeOf(user) : 'login';
+  if (State.screen === 'rest' && !State.quiz) State.screen = 'home';
   if (user && user.role === 'student' && !State.grade) State.grade = user.grade;
 
   const views = {
@@ -1003,6 +1241,10 @@ function render() {
     result: screenResult,
     games: screenGames,
     play: screenPlay,
+    rest: screenRest,
+    intro: screenIntro,
+    gate: screenGate,
+    settings: screenSettings,
     chat: () => Chat.listView(),
     chatroom: () => Chat.roomView(),
     leader: screenLeader,
@@ -1012,10 +1254,23 @@ function render() {
     inquiry: screenInquiry,
   };
 
+  Profile.apply();
   app.innerHTML = (views[State.screen] || screenHome)();
   app.className = `screen-${State.screen}`;
+  Layout.update();
+  afterQuizRender();
+  introAfterRender();
+  if (typeof FX !== 'undefined') {
+    FX.onRender();
+    // 공부를 마친 순간: 짧은 축하 (한 번만)
+    if (['result', 'rest'].includes(State.screen) && State.quiz && !State.quiz.celebrated) {
+      State.quiz.celebrated = true;
+      FX.celebrate();
+    }
+  }
   Chat.afterRender(State.screen);
   Motion.afterRender(State.screen);
+  if (LEADER_SCREENS.includes(State.screen)) Cloud.refreshLeader(render);
 }
 
 /* ============================ 이벤트 처리 ============================ */
@@ -1023,15 +1278,22 @@ function currentChapter() {
   return CHAPTER_BY_ID[State.chapterId];
 }
 
-app.addEventListener('click', (ev) => {
+app.addEventListener('click', async (ev) => {
   // 팝업 바깥(어두운 배경)을 누르면 닫혀요.
   if (ev.target.hasAttribute && ev.target.hasAttribute('data-backdrop')) return setSheet(null);
+
+  // 소리 도움 모드: 글자를 누르면 다시 읽어 줘요.
+  if (Profile.mode().tapRead) {
+    const r = ev.target.closest('[data-read]');
+    if (r && !r.closest('button')) Speech.readEl(r);
+  }
 
   const el = ev.target.closest(
     '[data-skip],[data-go],[data-back],[data-subject],[data-grade],[data-unit],[data-grow],[data-water],' +
       '[data-sub],[data-max],[data-max-locked],[data-start-max],[data-close-sheet],[data-lesson],[data-start-sub],' +
       '[data-choice],[data-submit],[data-next],[data-hint],[data-logout],[data-game],[data-chat-with],' +
-      '[data-student],[data-add-open],[data-add-cancel],[data-remove-student],[data-range]'
+      '[data-student],[data-add-open],[data-add-cancel],[data-remove-student],[data-range],' +
+      '[data-rep],[data-key],[data-read-problem],[data-rest-now]'
   );
   if (!el) return;
 
@@ -1048,7 +1310,7 @@ app.addEventListener('click', (ev) => {
   }
 
   if (el.hasAttribute('data-logout')) {
-    safely(() => Store.logOut());
+    await safelyAsync(() => Store.logOut());
     return go('login', { grade: null, subject: null, quiz: null, studentId: null });
   }
 
@@ -1069,7 +1331,8 @@ app.addEventListener('click', (ev) => {
   }
   if (el.hasAttribute('data-remove-student')) {
     if (!confirm('이 학생을 내 학생 목록에서 뺄까요? 학습 기록은 지워지지 않아요.')) return;
-    safely(() => Store.removeStudent(State.studentId));
+    const res = await safelyAsync(() => Store.removeStudent(State.studentId));
+    if (!res.ok) return;
     return go('leader');
   }
   if (el.dataset.range) {
@@ -1118,7 +1381,45 @@ app.addEventListener('click', (ev) => {
   if (el.dataset.choice !== undefined) {
     if (State.quiz.checked) return;
     State.quiz.selected = Number(el.dataset.choice);
+    render();
+    // 소리 도움 모드: 고른 보기를 읽어 줘요.
+    if (Profile.mode().tapRead) {
+      const t = document.querySelector(`[data-choice="${el.dataset.choice}"] .choice-text`);
+      if (t) Speech.readEl(t);
+    }
+    return;
+  }
+
+  // 표현 방식 바꾸기 (숫자 ↔ 그림 ↔ 듣기)
+  if (el.dataset.rep) {
+    State.quiz.rep = el.dataset.rep;
+    State.quiz.readKey = null;
+    Speech.stop();
     return render();
+  }
+
+  // 숫자패드
+  if (el.dataset.key) {
+    const q = State.quiz;
+    if (!q || q.checked) return;
+    const k = el.dataset.key;
+    if (k === 'back') q.typed = q.typed.slice(0, -1);
+    else if (k === 'clear') q.typed = '';
+    else if (q.typed.length < 5) q.typed = (q.typed === '0' ? '' : q.typed) + k;
+    return render();
+  }
+
+  if (el.hasAttribute('data-read-problem')) {
+    if (!Speech.ok) return toast('이 기기에서는 읽어 주기를 쓸 수 없어요.', 'error');
+    return readProblem();
+  }
+
+  // 단시간 집중 모드: "잠깐 쉴까?" → 쉬기 (지금까지 푼 것만 텃밭에 반영해요)
+  if (el.hasAttribute('data-rest-now')) {
+    const q = State.quiz;
+    const res = safely(() => Store.finishSession({ mode: q.mode, chapterId: q.chapterId, sub: q.sub, results: q.results }));
+    if (res.ok) q.outcome = res.value;
+    return go('rest');
   }
 
   if (el.hasAttribute('data-hint')) {
@@ -1127,19 +1428,21 @@ app.addEventListener('click', (ev) => {
     return render();
   }
 
-  if (el.hasAttribute('data-submit')) return submitAnswer();
+  if (el.hasAttribute('data-submit')) return State.quiz && quizParts().input === 'pencil' ? pencilSubmit() : submitAnswer();
   if (el.hasAttribute('data-next')) return nextQuestion();
 });
 
-app.addEventListener('change', (ev) => {
+app.addEventListener('change', async (ev) => {
   // 로그인 · 회원가입의 학생 / 지도자 탭 (다른 화면으로 가도 고른 쪽을 기억해요)
   if (ev.target.name === 'role') State.role = ev.target.value;
 
   // 지도자: 학생의 집중력 환기 기능 켜고 끄기
   if (ev.target.hasAttribute('data-motion-toggle')) {
     const on = ev.target.checked;
-    const res = safely(() => Store.setStudentMotion(State.studentId, on));
+    ev.target.disabled = true;
+    const res = await safelyAsync(() => Store.setStudentMotion(State.studentId, on));
     if (!res.ok) return render();
+    ev.target.disabled = false;
     toast(on ? '집중력 환기 기능을 켰어요.' : '집중력 환기 기능을 껐어요.');
   }
 });
@@ -1149,7 +1452,7 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && State.sheet) setSheet(null);
 });
 
-app.addEventListener('submit', (ev) => {
+app.addEventListener('submit', async (ev) => {
   const form = ev.target;
   ev.preventDefault();
   const fd = new FormData(form);
@@ -1162,45 +1465,50 @@ app.addEventListener('submit', (ev) => {
   }
 
   if (formId === 'login-form') {
-    try {
-      const user = Store.logIn(fd.get('role'), fd.get('id'), fd.get('password'), !!fd.get('keep'));
-      return go(homeOf(user), { grade: user.grade });
-    } catch (e) {
-      document.getElementById('login-error').textContent = e.message;
-      return;
-    }
+    return busy(form, async () => {
+      try {
+        const user = await Store.logIn(fd.get('role'), fd.get('id'), fd.get('password'), !!fd.get('keep'));
+        safely(() => Store.syncGarden());
+        go(homeOf(user), { grade: user.grade });
+      } catch (e) {
+        const el = document.getElementById('login-error');
+        if (el) el.textContent = e.message;
+      }
+    });
   }
 
   if (formId === 'signup-form') {
-    try {
-      const user = Store.signUp({
-        role: fd.get('role'),
-        name: fd.get('name'),
-        birth: fd.get('birth'),
-        id: fd.get('id'),
-        password: fd.get('password'),
-        password2: fd.get('password2'),
-        agree: !!fd.get('agree'),
-      });
-      toast(`${user.name}님, 반가워요!`);
-      return go(homeOf(user), { grade: user.grade });
-    } catch (e) {
-      document.getElementById('signup-error').textContent = e.message;
-      return;
-    }
+    return busy(form, async () => {
+      try {
+        const user = await Store.signUp({
+          role: fd.get('role'),
+          name: fd.get('name'),
+          birth: fd.get('birth'),
+          id: fd.get('id'),
+          password: fd.get('password'),
+          password2: fd.get('password2'),
+          agree: !!fd.get('agree'),
+        });
+        toast(`${user.name}님, 반가워요!`);
+        go(homeOf(user), { grade: user.grade });
+      } catch (e) {
+        const el = document.getElementById('signup-error');
+        if (el) el.textContent = e.message;
+      }
+    });
   }
 
   if (formId === 'add-student-form') {
-    const res = safely(() => Store.addStudent(fd.get('id')));
-    if (!res.ok) return;
+    const res = await busy(form, () => safelyAsync(() => Store.addStudent(fd.get('id'))));
+    if (!res || !res.ok) return;
     toast(`${res.value.name} 학생을 추가했어요.`);
     State.adding = false;
     return render();
   }
 
   if (formId === 'inquiry-form') {
-    const res = safely(() => Store.addInquiry(fd.get('text')));
-    if (!res.ok) return;
+    const res = await busy(form, () => safelyAsync(() => Store.addInquiry(fd.get('text'))));
+    if (!res || !res.ok) return;
     toast('문의를 남겼어요.');
     return render();
   }
@@ -1212,4 +1520,17 @@ app.addEventListener('submit', (ev) => {
   State.screen = 'splash';
   render();
   splashTimer = setTimeout(leaveSplash, 1800);
+  loadFx();
 })();
+
+/** 스와이프 효과(fx.js)는 첫 화면이 뜬 뒤 한가할 때 불러와요. 첫 로딩을 느리게 하지 않으려고. */
+function loadFx() {
+  const add = () => {
+    const sc = document.createElement('script');
+    sc.src = 'js/fx.js?v=20';
+    sc.async = true;
+    document.body.appendChild(sc);
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(add, { timeout: 2500 });
+  else setTimeout(add, 1200);
+}
