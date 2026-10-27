@@ -31,6 +31,9 @@
   --fg-grass: #8ebc64;
   --fg-scrim: #00000080;
   --font-fig: 'DNFBitBitv2', 'Galmuri11', 'Apple SD Gothic Neo', sans-serif;
+  /* 예전 글꼴 변수도 피그마 글꼴로 */
+  --font-head: var(--font-fig);
+  --font-body: var(--font-fig);
   /* 피그마 글자 크기 */
   --t-display: 28px; --t-h1: 24px; --t-h2: 20px; --t-body: 18px; --t-label: 16px; --t-caption: 14px;
 }
@@ -262,3 +265,144 @@ h1, h2, h3, .jua, .stat-num { font-family: var(--font-fig); }
 #app .sch.todo { opacity: .55; filter: none; }
 #app .sch-arrow { color: var(--fg-outline); }
 #app .sch-check { background: var(--fg-track); color: var(--fg-text); border: 2px solid var(--fg-outline); }
+
+/* ---------- 개념보기 ---------- */
+.scr-lesson .stage { height: auto !important; min-height: 844px; padding-bottom: 40px; }
+.title-bar { left: 72px; top: 57px; width: 246px; height: 48px; padding: 6px 19px; display: flex; align-items: center; font-size: 16px; line-height: 1.3; color: var(--fg-text-accent); white-space: nowrap; overflow: hidden; }
+.lesson-flow { position: relative !important; margin: 120px 24px 0; display: flex; flex-direction: column; }
+.lesson-flow .schedule { margin: 0 -12px 6px; }
+.wood-board { padding: 18px 18px 21px 15px; }
+.wood-pic { padding: 18px 20px 21px 18px; display: grid; gap: 10px; min-height: 120px; color: var(--fg-text); }
+.wood-pic h2 { margin: 0; }
+.wood-pic p { margin: 0; font-size: calc(18px * var(--fs)); }
+.lesson-icon { font-size: 48px; line-height: 1.1; }
+.lesson-now { justify-self: start; padding: 2px 10px 4px; background: var(--fg-accent); border: 3px solid var(--fg-outline); color: var(--fg-text); }
+.board-legs { position: relative; height: 48px; margin: -3px 0; z-index: 0; }
+.wood-board { position: relative; z-index: 1; }
+.board-legs i { position: absolute; top: 0; width: 21px; height: 48px; }
+.board-legs i:first-child { left: 54px; } .board-legs i:last-child { left: 267px; }
+.lesson-start { margin-top: 24px; height: 64px; font-size: 20px; }
+
+/* ---------- 채팅 (피그마 '채팅 · 문구 선택 / 이모지 선택 / 미리보기 / 주의 사항') ---------- */
+#app.screen-chatroom, #app.screen-chat { max-width: none; background: #96c6ea; min-height: 100dvh; }
+.chat-sky { position: fixed; left: 0; right: 0; top: 0; height: 100vh; pointer-events: none; }
+.chat-sky img { position: absolute; zoom: var(--u); margin-left: calc(50vw / var(--u) - 195px); }
+.chat-head .zoomed > * { position: absolute; }
+.chat-head .zoomed { background: linear-gradient(#96c6ea 85%, rgba(150, 198, 234, 0)); }
+.chat-avatar { left: 171px; top: 48px; width: 48px; height: 48px; display: grid; place-items: center; }
+.chat-name-plate { left: 50%; top: 102px; transform: translateX(-50%); }
+.chat-online { right: 16px; top: 66px; font-size: 13px; color: var(--fg-text); background: #fefce5; border: 3px solid var(--fg-outline); padding: 3px 8px 5px; }
+.chat-online.off { color: var(--fg-text-2); background: #e8d8b2; }
+.chat-room { width: 390px; margin: 0 auto; zoom: var(--u); padding: 160px 16px 150px; position: relative; }
+.chat-topic { display: flex; align-items: center; gap: 8px; padding: 9px 12px 12px 12px; margin-bottom: 16px; }
+.chat-topic p { margin: 0; flex: 1; font-size: 14px; line-height: 1.4; color: var(--fg-text); }
+.chat-topic b { font-weight: 400; color: var(--fg-text-accent); }
+.chat-topic-next { width: 44px; height: 44px; background: none; border: 0; font-size: 20px; }
+.chat-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 21px; max-height: none; overflow: visible; background: none; }
+.chat-msg { display: flex; justify-content: flex-start; padding: 0; background: none; }
+.chat-msg.mine { justify-content: flex-end; }
+.chat-bubble { position: relative; min-height: 57px; padding: 15px 18px 12px 19px; display: inline-flex; align-items: center; max-width: 300px; }
+.chat-bubble.emoji { padding: 12px 15px 15px 15px; }
+.chat-bubble .chat-text { font-size: calc(18px * var(--fs)); line-height: 1.5; color: var(--fg-text); white-space: normal; }
+.chat-bubble .tail { position: absolute; bottom: -9px; left: 12px; width: 21px; height: 12px; }
+.chat-msg.mine .chat-bubble .tail { left: auto; right: 12px; }
+.chat-empty { text-align: center; color: var(--fg-text); padding: 30px 0; }
+.chat-foot .zoomed { background: #f2e6c8; border-top: 3px solid var(--fg-outline); box-shadow: inset 0 3px 0 #fefce5; }
+.chat-input { position: relative; height: 78px; }
+.chat-field { position: absolute; left: 12px; top: 12px; width: 297px; height: 54px; padding: 12px 18px; justify-content: flex-start; }
+.chat-field .field-hint { color: var(--fg-text-2); }
+.chat-send { position: absolute; left: 318px; top: 9px; width: 60px; height: 57px; padding: 0 3px 3px 0; }
+.chat-home-space { height: 34px; }
+.chat-panel { height: 300px; background: #e8d8b2; border-top: 3px solid var(--fg-outline); position: relative; }
+.chat-tabs { position: absolute; left: 16px; top: 12px; width: 358px; display: flex; gap: 16px; }
+.chat-tab { flex: 1; height: 48px; font-size: 20px; }
+.pick-grid { position: absolute; left: 16px; top: 75px; width: 358px; }
+.pick-grid.phrases { display: grid; grid-template-columns: 171px 171px; column-gap: 16px; row-gap: 9px; }
+.pick-grid.phrases .pick { height: 60px; padding: 6px 6px 9px 3px; }
+.pick-grid.emojis { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 15px; left: 0; width: 390px; }
+.pick-grid.emojis .pick { width: 108px; height: 87px; padding: 6px 6px 9px 3px; }
+.pick:active { transform: translate(3px, 3px); }
+/* 주의 사항 팝업 */
+.chat-rules .f-scrim { zoom: 1; position: absolute !important; left: -2000px; top: -2000px; width: 5000px; height: 5000px; }
+.chat-rules > * { position: absolute; }
+.rule-row { left: 48px; width: 294px; height: 78px; background: #fefce5; display: flex; align-items: center; gap: 14px; padding: 0 12px; }
+.rule-row p { margin: 0; color: var(--fg-text); }
+
+#app .chat-room { background: none; }
+#app .chat-bubble .chat-text { background: none; border: 0; padding: 0; box-shadow: none; border-radius: 0; }
+#app .chat-avatar img { width: 42px; height: 30px; }
+
+/* ---------- 운동 시간 (피그마 85:10943 · 85:10961) ---------- */
+#motion-layer .motion-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, .5); display: block; padding: 0; }
+#motion-layer .zoomed { position: relative; width: 390px; height: 844px; margin: 0 auto; zoom: var(--u); font-family: var(--font-fig); color: var(--fg-text); }
+#motion-layer .zoomed > * { position: absolute; }
+#motion-layer .px { border-width: 0; background-color: transparent; }
+.m-bubble { left: 51px; top: 222px; width: 288px; height: 73px; display: grid; place-items: center; padding: 6px 22px 9px 19px; text-align: center; }
+.m-bubble.small { left: 88px; top: 166px; width: 216px; }
+.m-buddy { left: 75px; top: 300px; width: 240px; height: 240px; padding: 0; border: 0; background: none; cursor: pointer; animation: buddy-breathe 2.4s ease-in-out infinite; }
+.m-buddy img { width: 240px; height: 240px; object-fit: contain; }
+.m-card { left: 24px; top: 246px; width: 342px; height: 408px; }
+.m-small { left: 135px; top: 280px; width: 120px; height: 120px; object-fit: contain; }
+.m-name { left: 0; top: 430px; width: 390px; margin: 0; text-align: center; font-size: 24px; white-space: nowrap; }
+.m-count { left: 0; top: 472px; width: 390px; margin: 0; text-align: center; font-size: 28px; color: var(--fg-text-accent); }
+.m-btn { font-size: 16px; }
+
+/* ---------- 엔딩 ---------- */
+.end-skip { zoom: calc(1 / var(--u)); position: fixed !important; inset: 0; width: 100vw; height: 100vh; }
+.end-scene { left: 39px; top: 212px; width: 312px; height: 396px; overflow: hidden; background: #96c6ea; pointer-events: none; }
+.end-scene > * { position: absolute; display: block; }
+.end-ground { left: 0; top: 330px; width: 312px; height: 66px;
+  background: linear-gradient(#b4da8a 0 3px, #8ebc64 3px 15px, #8a5a34 15px 18px, #b07a4a 18px); }
+.end-stream { left: 135px; top: 0; width: 42px; height: 0; background: url('../assets/ui/water-stream-tile.svg') 0 0 / 42px 42px repeat-y; opacity: 0; }
+.end-drop.a { left: 126px; width: 12px; height: 15px; background: url('../assets/ui/water-drop-a.svg') center / contain no-repeat; opacity: 0; }
+.end-drop.b { left: 183px; width: 6px; height: 12px; background: url('../assets/ui/water-drop-b.svg') center / contain no-repeat; opacity: 0; }
+.end-glow { left: 51px; top: 156px; width: 210px; height: 210px; }
+.end-sprout { left: 96px; top: 216px; width: 120px; height: 120px; object-fit: contain; transform-origin: 50% 100%; }
+.end-splash { left: 136px; top: 204px; width: 39px; height: 18px; opacity: 0; }
+.end-spark { image-rendering: pixelated; opacity: 0; }
+.end-spark.set6 { opacity: 1; } /* 움직임을 끄면 06 모습 그대로 */
+.end-msg { left: 0; top: 612px; width: 390px; margin: 0; text-align: center; color: var(--fg-text); }
+.end-next { left: 75px; top: 672px; width: 240px; height: 60px; font-size: 18px; }
+
+/* 움직임: 0~1.4초 물줄기 → 1.4초 물 튀김 → 1.7초부터 빛 · 흔들기 · 반짝이 */
+.scr-ending .end-stream { animation: end-stream 1.7s steps(6, end) both; }
+.scr-ending .end-drop.a { animation: end-drop-a 1.7s steps(6, end) both; }
+.scr-ending .end-drop.b { animation: end-drop-b 1.7s steps(6, end) both; }
+.scr-ending .end-splash { animation: end-splash 1.9s both; }
+.scr-ending .end-glow { animation: end-fade 0.5s 1.7s both; }
+.scr-ending .end-sprout { animation: end-wiggle 1s 1.7s steps(1, end) 3 both; }
+.scr-ending .end-spark.set5 { animation: end-spark5 1s 1.7s steps(1, end) 3 both; }
+.scr-ending .end-spark.set6 { animation: end-spark6 1s 1.7s steps(1, end) 3 both; }
+.scr-ending .end-spark.set7 { animation: end-spark7 1s 1.7s steps(1, end) 3 both; }
+@keyframes end-stream { 0% { height: 0; opacity: 1; } 20% { height: 66px; } 50% { height: 168px; } 82% { height: 309px; opacity: 1; } 100% { height: 309px; opacity: 0; } }
+@keyframes end-drop-a { 0% { top: 0; opacity: 1; } 20% { top: 69px; } 50% { top: 171px; } 82% { top: 312px; opacity: 1; } 100% { top: 312px; opacity: 0; } }
+@keyframes end-drop-b { 0% { top: -6px; opacity: 1; } 20% { top: 60px; } 50% { top: 162px; } 82% { top: 303px; opacity: 1; } 100% { top: 303px; opacity: 0; } }
+@keyframes end-splash { 0%, 70% { opacity: 0; } 74%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes end-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes end-wiggle { 0% { transform: rotate(-10deg); } 25% { transform: rotate(0); } 50% { transform: rotate(10deg); } 75% { transform: rotate(0); } 100% { transform: rotate(0); } }
+@keyframes end-spark5 { 0% { opacity: 1; } 25%, 100% { opacity: 0; } }
+@keyframes end-spark6 { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } 75%, 100% { opacity: 1; } }
+@keyframes end-spark7 { 0%, 25% { opacity: 0; } 50% { opacity: 1; } 75%, 100% { opacity: 0; } }
+
+/* ---------- 무대 밖 화면(설정 · 결과 · 로그인 · 지도자 · 채팅 목록 · 쉬는 시간): 피그마 바탕 · 글꼴 ---------- */
+body { background: #fefbe8; }
+#app:not(.figma) { background: #fefbe8; }
+#app .hud { background: #f2e6c8; border-bottom: 3px solid var(--fg-outline); box-shadow: inset 0 -3px 0 #dec59e; }
+#app .hud-title { font-size: 20px; color: var(--fg-text); }
+#app .page h2, #app .page h3, #app .section-title { color: var(--fg-text); }
+#app.screen-chat .page { padding-top: 20px; }
+.tabbar-space { height: calc(124px * var(--u)); }
+
+/* ---------- 결과 (피그마 부품으로) ---------- */
+#app.screen-result { max-width: none; background: #97ba6e; }
+#app.screen-result .schedule, #app .fresult { position: relative; z-index: 1; }
+#app .fresult { background: none; max-width: 520px; margin: 0 auto; padding: 8px 20px 40px; text-align: center; }
+#app .fresult h2 { font-size: 30px; margin: 14px 0 4px; background: none; text-shadow: none; color: #fff; -webkit-text-stroke: 6px var(--fg-outline); paint-order: stroke fill; }
+#app .fresult .result-sub { color: var(--fg-text); background: #fefce5; display: inline-block; padding: 4px 12px 6px; border: 3px solid var(--fg-outline); }
+#app .fresult .result-plant { width: 160px; height: 160px; margin: 10px auto 0; background: none; border: 0; }
+#app .fresult .result-gauge-wrap { position: relative; width: 318px; height: 48px; margin: 6px auto 0; }
+#app .fresult .result-gauge-wrap .gauge { position: absolute; left: 0; top: 0; }
+#app .fresult .stat { padding: 12px 10px 15px; }
+#app .fresult .reward-bar { margin-top: 12px; padding: 10px 14px 13px; color: var(--fg-text); }
+#app .fresult .streak-strip i { border-color: var(--fg-outline); }
+#app .fresult .muted-note { color: var(--fg-text); }

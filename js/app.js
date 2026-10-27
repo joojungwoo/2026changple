@@ -51,7 +51,7 @@ const State = {
 /** 로그인 없이 볼 수 있는 화면 */
 const PUBLIC_SCREENS = ['splash', 'loading', 'intro', 'login', 'signup'];
 /** 피그마 무대(stage.js)로 그리는 화면 */
-const FIGMA_SCREENS = ['splash', 'loading', 'home', 'garden', 'unit', 'games'];
+const FIGMA_SCREENS = ['splash', 'loading', 'home', 'garden', 'unit', 'games', 'lesson', 'ending'];
 /** 화면 사이를 오갈 때 펼친 메뉴는 닫아요. */
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
@@ -281,43 +281,6 @@ function screenSignup() {
 
 /* ========================= 4. 텃밭 (단원 = 밭) ========================= */
 /* ========================== 6. 개념 학습 ========================== */
-function screenLesson() {
-  const ch = CHAPTER_BY_ID[State.chapterId];
-  const subject = getSubject(ch.subject);
-  const s = ch.subunits[State.subIdx] || ch.subunits[0];
-  const card = (c, i) => `<div class="concept-card ${i === s.idx ? 'focus' : ''}">
-      <div class="cc-icon">${esc(c.icon)}</div>
-      <div class="cc-body">
-        ${i === s.idx ? '<span class="focus-tag">지금 배울 내용</span>' : ''}
-        <strong>${esc(c.title)}</strong>
-        <p>${nl(c.text)}</p>
-      </div>
-    </div>`;
-  const others = ch.concept.cards.map((c, i) => (i === s.idx ? '' : card(c, i))).join('');
-
-  // 그림 띠: 개념 보기 → 문제 풀기 → (친구 돕기) → 끝
-  const m = Profile.mode();
-  const plan = sessionPlan('sub', { focus: !!m.focus, concept: true, friend: !m.focus && s.questions.some((q) => Friend.attempt(Problem.from(q))) });
-  return `
-    ${hud({ back: 'unit', title: `${s.no} ${esc(s.title)}` })}
-    ${scheduleStrip(plan)}
-    <main class="page">
-      <section class="concept-hero ${subject.theme}">
-        <div class="concept-emoji">${ch.icon}</div>
-        <span class="hero-tag">${ch.grade}학년 ${subject.name} ${ch.label}</span>
-        <h2>${esc(ch.title)}</h2>
-        <p>${esc(ch.concept.summary)}</p>
-      </section>
-
-      <div class="concept-cards">
-        ${card(ch.concept.cards[s.idx], s.idx)}
-      </div>
-      <h3 class="section-title small">이 단원의 다른 내용</h3>
-      <div class="concept-cards">${others}</div>
-
-      <button class="btn btn-primary btn-lg btn-block" data-start-sub="${s.idx}">${pxIcon('pencil')} ${s.no} 문제 풀기</button>
-    </main>`;
-}
 
 /* ========================== 7. 문제 풀기 ========================== */
 function startQuiz(mode, questions, opts) {
@@ -613,7 +576,9 @@ function nextQuestion() {
   // 세션 끝: 텃밭에 반영
   const res = safely(() => Store.finishSession({ mode: q.mode, chapterId: q.chapterId, sub: q.sub, results: q.results }));
   if (res.ok) q.outcome = res.value;
-  go(q.focusUntil ? 'rest' : 'result');
+  // 피그마 엔딩: 물이 쏟아지고 새싹이 반짝여요. 끝나면 쉬는 화면 또는 결과로 가요.
+  q.after = q.focusUntil ? 'rest' : 'result';
+  go('ending');
 }
 
 /** 단시간 집중 모드: 끝나면 쉬는 화면 → 결과 */
@@ -729,18 +694,14 @@ function screenResult() {
   }
 
   return `
+    <div class="fbg fbg-view" data-bg="meadow" aria-hidden="true"></div>
     ${q.plan ? scheduleStrip(q.plan) : ''}
-    <main class="page flush result">
-      <span class="confetti" style="top:12px;left:26px">🎊</span>
-      <span class="confetti" style="top:30px;right:34px">✨</span>
-      <span class="confetti" style="top:74px;left:58px;font-size:16px">🎉</span>
-      <span class="confetti" style="top:60px;right:70px;font-size:16px">✨</span>
-
-      <h2>${title}</h2>
+    <main class="page flush result fresult">
+      <h2 class="t-outline">${title}</h2>
       <p class="result-sub">${chapter.icon} ${chapter.label} ${esc(chapter.title)}${sub ? ` · ${sub}` : ''}</p>
 
-      <div class="result-plant">${plantSvg(after.stage, after.wilted ? 'wilt' : '')}</div>
-      <div class="gauge result-gauge"><span class="drop" aria-hidden="true">${pxIcon('drop')}</span>${waterCells(after)}</div>
+      <div class="result-plant"><img src="${UI_IMG.stage[after.stage]}" alt="${STAGE_NAME[after.stage]}" width="160" height="160"></div>
+      <div class="result-gauge-wrap">${waterGauge(after)}</div>
 
       ${
         max && !max.passed
@@ -754,14 +715,14 @@ function screenResult() {
       }
 
       <div class="stat-row" style="margin-top:14px">
-        <div class="stat"><div class="stat-num">${correct} / ${total}</div><div class="stat-label">맞힌 문제</div></div>
-        <div class="stat"><div class="stat-num">${minutes}분</div><div class="stat-label">걸린 시간</div></div>
+        <div class="stat px px-tile px-surface"><div class="stat-num">${correct} / ${total}</div><div class="stat-label">맞힌 문제</div></div>
+        <div class="stat px px-tile px-surface"><div class="stat-num">${minutes}분</div><div class="stat-label">걸린 시간</div></div>
       </div>
 
       ${
         wrong
-          ? `<div class="reward-bar blue"><span>${pxIcon('drop')} 틀린 ${wrong}문제는 다음에 물 줄 때 다시 만나요</span></div>`
-          : `<div class="reward-bar blue"><span>✨ 하나도 틀리지 않았어요!</span></div>`
+          ? `<div class="reward-bar px px-plate px-surface"><span>💧 틀린 ${wrong}문제는 다음에 물 줄 때 다시 만나요</span></div>`
+          : `<div class="reward-bar px px-plate px-surface"><span>✨ 하나도 틀리지 않았어요!</span></div>`
       }
 
       <div class="streak-strip">${week}</div>
@@ -995,7 +956,7 @@ function render() {
   if (State.screen === 'play' && !GAMES.some((g) => g.id === State.gameId)) State.screen = 'games';
   if (State.screen === 'chatroom' && !Chat.knows(State.chatWith)) State.screen = 'chat';
   if (['settings', 'rest'].includes(State.screen) && (!user || user.role !== 'student')) State.screen = user ? homeOf(user) : 'login';
-  if (State.screen === 'rest' && !State.quiz) State.screen = 'home';
+  if (['rest', 'ending'].includes(State.screen) && !State.quiz) State.screen = 'home';
   if (user && user.role === 'student' && !State.grade) State.grade = user.grade;
 
   const views = {
@@ -1011,6 +972,7 @@ function render() {
     games: screenGames,
     play: screenPlay,
     rest: screenRest,
+    ending: screenEnding,
     loading: screenLoading,
     intro: screenIntro,
     settings: screenSettings,
@@ -1031,6 +993,7 @@ function render() {
   Stage.paint();
   loadingAfterRender();
   if (State.screen === 'garden') ScrollGrass.mount();
+  endingAfterRender();
   afterQuizRender();
   introAfterRender();
   if (typeof FX !== 'undefined') {
@@ -1312,7 +1275,7 @@ app.addEventListener('submit', async (ev) => {
 function loadFx() {
   const add = () => {
     const sc = document.createElement('script');
-    sc.src = 'js/fx.js?v=22';
+    sc.src = 'js/fx.js?v=25';
     sc.async = true;
     document.body.appendChild(sc);
   };

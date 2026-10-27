@@ -458,3 +458,84 @@ const ScrollGrass = {
 };
 window.addEventListener('scroll', () => State.screen === 'garden' && ScrollGrass.onScroll(), { passive: true });
 window.addEventListener('resize', () => State.screen === 'garden' && ScrollGrass.resize());
+
+/* ------------------------------ 개념보기 (피그마 '개념보기': 나무 액자 + 다리) ------------------------------ */
+function woodBoard(inner, cls) {
+  return `<section class="wood-board px px-tile px-wood ${cls || ''}"><div class="wood-pic px px-cell px-surface">${inner}</div></section>`;
+}
+const boardLegs = () => '<div class="board-legs" aria-hidden="true"><i class="px px-post px-wood"></i><i class="px px-post px-wood"></i></div>';
+
+function screenLesson() {
+  const ch = CHAPTER_BY_ID[State.chapterId];
+  const s = ch.subunits[State.subIdx] || ch.subunits[0];
+  const cards = ch.concept.cards;
+  const card = (c, now) => woodBoard(`
+      ${now ? '<span class="lesson-now t-caption">지금 배울 내용</span>' : ''}
+      <h2 class="t-h2" data-read>${esc(c.title)}</h2>
+      <div class="lesson-icon" aria-hidden="true">${esc(c.icon)}</div>
+      <p class="t-body" data-read>${nl(c.text)}</p>`, now ? 'now' : '');
+  const others = cards.filter((_, i) => i !== s.idx);
+  // 그림 띠: 개념 보기 → 문제 풀기 → (친구 돕기) → 끝
+  const m = Profile.mode();
+  const plan = sessionPlan('sub', { focus: !!m.focus, concept: true, friend: !m.focus && s.questions.some((q) => Friend.attempt(Problem.from(q))) });
+  const boards = [
+    woodBoard(`<h2 class="t-h2" data-read>${esc(ch.title)}</h2><p class="t-body" data-read>${esc(ch.concept.summary)}</p>`, 'summary'),
+    card(cards[s.idx], true),
+    ...others.map((c) => card(c, false)),
+  ];
+  return stageScreen({
+    cls: 'scr-lesson scroll',
+    bg: 'meadow',
+    sky: '#99c8eb',
+    ground: '#97ba6e',
+    h: 400,
+    body: `
+      ${fRound('data-back="unit" style="left:16px;top:57px"', UI_IMG.back, '뒤로 가기')}
+      <div class="title-bar px px-chip px-surface">${s.no} ${esc(s.title)}</div>
+      <div class="lesson-flow">
+        ${scheduleStrip(plan)}
+        ${boards.join(boardLegs())}
+        <button class="f-btn f-button lesson-start px px-tile px-primary" data-start-sub="${s.idx}">✏️ ${s.no} 문제 풀기</button>
+      </div>`,
+  });
+}
+
+/* ------------------------------ 엔딩 (피그마 '엔딩' 01~07) ------------------------------ */
+/**
+ * 공부를 마치면: 물줄기가 내려와 새싹에 쏟아지고(01~04), 노란 빛 속에서 새싹이 반짝이며 흔들려요(05~07).
+ * 움직임을 끄면 마지막 모습(06)만 보여요. 화면을 누르거나 버튼을 누르면 결과로 넘어가요.
+ */
+function screenEnding() {
+  const sparkle = (set, x, y, s) => `<img class="end-spark set${set}" src="${UI_IMG.sparkle}" alt="" style="left:${x}px;top:${y}px;width:${s}px;height:${s}px">`;
+  return stageScreen({
+    cls: 'scr-ending',
+    bg: 'meadow',
+    sky: '#99c8eb',
+    ground: '#97ba6e',
+    body: `
+      <button class="f-scrim end-skip" data-end-next aria-label="결과 보기"></button>
+      <div class="popup-panel px px-panel px-surface" style="top:194px;height:456px"></div>
+      <div class="end-scene" aria-hidden="true">
+        <i class="end-ground"></i>
+        <i class="end-stream"></i><i class="end-drop a"></i><i class="end-drop b"></i>
+        <img class="end-glow" src="assets/ui/glow.svg" alt="">
+        <img class="end-sprout" src="${UI_IMG.logo}" alt="">
+        <img class="end-splash" src="assets/ui/water-splash.svg" alt="">
+        ${sparkle(5, 66, 180, 36)}${sparkle(5, 222, 168, 27)}${sparkle(5, 96, 96, 24)}${sparkle(5, 204, 252, 21)}
+        ${sparkle(6, 54, 132, 27)}${sparkle(6, 234, 216, 36)}${sparkle(6, 180, 84, 24)}${sparkle(6, 84, 258, 21)}
+        ${sparkle(7, 78, 216, 33)}${sparkle(7, 210, 120, 27)}${sparkle(7, 120, 72, 21)}${sparkle(7, 246, 270, 24)}
+      </div>
+      <p class="end-msg t-h2" role="status">물을 듬뿍 줬어요! 🌱</p>
+      <button class="f-btn f-button px px-tile px-primary end-next" data-end-next>결과 보기</button>`,
+  });
+}
+
+let endingTimer = null;
+function endingAfterRender() {
+  clearTimeout(endingTimer);
+  if (State.screen !== 'ending') return;
+  endingTimer = setTimeout(() => State.screen === 'ending' && go(State.quiz.after || 'result'), motionAllowed() ? 4200 : 1500);
+}
+document.getElementById('app').addEventListener('click', (ev) => {
+  if (State.screen === 'ending' && ev.target.closest('[data-end-next]')) go(State.quiz.after || 'result');
+});

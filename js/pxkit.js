@@ -30,6 +30,7 @@ const PX_FACES = {
   wood: ['#c17f45', '#d9a066', '#8e5a2e'],
   fill: ['#f0a04b', '#f7be73', '#d07f2c'],
   mine: ['#8ebc64', '#b4da8a', '#4fa055'],
+  white: ['#fefce5', '#fefce5', '#dec59e'], // 글 칸 · 고르지 않은 칩 (앞면 = 밝은 색)
 };
 const PX_OUTLINE = '#573520';
 const PX_SHADOW = '#605550';

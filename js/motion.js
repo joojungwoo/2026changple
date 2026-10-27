@@ -37,7 +37,8 @@ const Motion = {
 
   _eligible() {
     // 게임 중에는 게임 화면(iframe) 안의 터치를 알 수 없어서 띄우지 않아요.
-    return !!this.screen && !['splash', 'play'].includes(this.screen) && Store.motionOn();
+    // 문제를 푸는 중에는 생각하는 중일 수 있어서 방해하지 않아요. (피그마 메모)
+    return !!this.screen && !['splash', 'loading', 'play', 'quiz', 'ending'].includes(this.screen) && Store.motionOn();
   },
 
   /** 터치·키 입력이 있을 때마다 다시 5분을 세요. */
@@ -81,30 +82,22 @@ const Motion = {
       return;
     }
     const ex = this.exercise;
+    // 피그마 '운동 시간 · 새싹 친구 부르기' / '같이 해요' (390×844 무대를 화면에 맞춰 확대)
     layer.innerHTML =
       this.phase === 'call'
-        ? `<div class="motion-overlay" role="dialog" aria-modal="true" aria-label="운동할 시간이에요">
-            <div class="motion-say">운동할 시간이에요!</div>
-            <button class="motion-buddy" data-motion-start aria-label="새싹 친구 누르고 운동하기">
-              <span class="wiggle l" aria-hidden="true">((</span>
-              ${sproutBuddy('buddy-big')}
-              <span class="wiggle r" aria-hidden="true">))</span>
-              <span class="motion-ribbon">운동하기</span>
-            </button>
-            <p class="motion-tip">새싹 친구를 눌러 보세요 👆</p>
-          </div>`
-        : `<div class="motion-overlay" role="dialog" aria-modal="true" aria-label="${ex.name} ${ex.count}">
-            <div class="motion-card">
-              <div class="motion-peek">
-                ${sproutBuddy('buddy-small')}
-                <span class="motion-watch">지켜보고 있다!</span>
-              </div>
-              <div class="motion-ex-icon" aria-hidden="true">${ex.icon}</div>
-              <h2>${ex.name}</h2>
-              <div class="motion-count">${ex.count}!</div>
-              <button class="btn btn-primary btn-lg btn-block" data-motion-done>완료</button>
-            </div>
-          </div>`;
+        ? `<div class="motion-overlay" role="dialog" aria-modal="true" aria-label="운동할 시간이에요"><div class="zoomed">
+            <div class="m-bubble px px-panel px-surface t-h2">운동할 시간이에요!</div>
+            <button class="m-buddy" data-motion-start aria-label="새싹 친구 누르고 운동하기"><img src="assets/ui/logo-sprout.png" alt=""></button>
+            <button class="f-btn f-button m-btn px px-tile px-primary" data-motion-start style="left:36px;top:576px;width:318px;height:66px">새싹 친구를 눌러 보세요</button>
+          </div></div>`
+        : `<div class="motion-overlay" role="dialog" aria-modal="true" aria-label="${ex.name} ${ex.count}"><div class="zoomed">
+            <div class="m-card px px-panel px-surface"></div>
+            <img class="m-small" src="assets/ui/logo-sprout.png" alt="" aria-hidden="true">
+            <div class="m-bubble small px px-panel px-surface t-h2">같이 해볼까?</div>
+            <p class="m-name">${ex.icon} ${ex.name}</p>
+            <p class="m-count">${ex.count}!</p>
+            <button class="f-btn f-button m-btn px px-tile px-primary" data-motion-done style="left:63px;top:552px;width:264px;height:66px">다 했어요!</button>
+          </div></div>`;
   },
 };
 
