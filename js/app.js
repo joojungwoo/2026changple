@@ -156,7 +156,7 @@ function hud(o) {
       ${opts.title ? `<h1 class="hud-title">${opts.title}</h1>` : ''}
       <span class="hud-spacer"></span>
       ${(opts.rightPills || []).join('')}
-      ${opts.settings ? `<button class="icon-btn hold-btn" data-settings-hold aria-label="설정 (보호자가 3초 동안 누르기)"><span aria-hidden="true">⚙️</span><i class="hold-fill" aria-hidden="true"></i></button>` : ''}
+      ${opts.settings ? `<button class="icon-btn" data-go="settings" aria-label="설정"><span aria-hidden="true">⚙️</span></button>` : ''}
       ${opts.logout ? `<button class="icon-btn" data-logout aria-label="로그아웃">${pxIcon('door')}</button>` : ''}
     </header>`;
 }
@@ -1225,7 +1225,7 @@ function render() {
   if (['quiz', 'result'].includes(State.screen) && !State.quiz) State.screen = 'home';
   if (State.screen === 'play' && !GAMES.some((g) => g.id === State.gameId)) State.screen = 'games';
   if (State.screen === 'chatroom' && !Chat.knows(State.chatWith)) State.screen = 'chat';
-  if (['gate', 'settings', 'rest'].includes(State.screen) && (!user || user.role !== 'student')) State.screen = user ? homeOf(user) : 'login';
+  if (['settings', 'rest'].includes(State.screen) && (!user || user.role !== 'student')) State.screen = user ? homeOf(user) : 'login';
   if (State.screen === 'rest' && !State.quiz) State.screen = 'home';
   if (user && user.role === 'student' && !State.grade) State.grade = user.grade;
 
@@ -1243,7 +1243,6 @@ function render() {
     play: screenPlay,
     rest: screenRest,
     intro: screenIntro,
-    gate: screenGate,
     settings: screenSettings,
     chat: () => Chat.listView(),
     chatroom: () => Chat.roomView(),
@@ -1527,7 +1526,7 @@ app.addEventListener('submit', async (ev) => {
 function loadFx() {
   const add = () => {
     const sc = document.createElement('script');
-    sc.src = 'js/fx.js?v=20';
+    sc.src = 'js/fx.js?v=21';
     sc.async = true;
     document.body.appendChild(sc);
   };

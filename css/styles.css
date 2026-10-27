@@ -1305,8 +1305,17 @@ body[data-font="xl"] { --fs: 1.32; }
 .quiz-title { font-size: calc(18px * var(--fs)); }
 
 /* iPad 세로 · 큰 화면: 가운데 넓게 */
+/* 태블릿 · 컴퓨터: 앱이 화면을 꽉 채워요. (예전에는 가운데 좁은 기둥이라 양옆이 비었어요)
+ * 하늘 · 풀밭 · 텃밭 같은 배경은 끝까지, 글과 버튼은 가운데 읽기 좋은 폭(--content) 안에 둬요. */
+:root { --content: 880px; --side: max(16px, calc((100% - var(--content)) / 2)); }
 @media (min-width: 700px) {
-  #app { max-width: 760px; }
+  #app { max-width: none; }
+  .hud, .tabbar, .page:not(.flush), .page.result, .scene-ground, .garden, .intro, .schedule, .grade-tabs { padding-left: var(--side); padding-right: var(--side); }
+  .tab { max-width: 240px; }
+  .tabbar { justify-content: center; }
+  .plots { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .quiz-scene .question-card { margin-left: var(--side); margin-right: var(--side); }
+  .rep-toggle, .quiz-title, .scene-gauge, .scene-note { margin-left: var(--side); margin-right: var(--side); }
 }
 /* 가로 배치: 왼쪽 문제, 오른쪽 풀이 (자동이면 기기가 가로일 때, 가로를 고르면 늘) */
 #app.wide.screen-quiz { max-width: 1366px; }
@@ -1371,17 +1380,6 @@ body[data-font="xl"] { --fs: 1.32; }
 .rest-buddy svg { width: 120px; height: 120px; margin: 0 auto; display: block; animation: rest-breathe 4s ease-in-out infinite; }
 .rest-buddy.small svg { width: 72px; height: 72px; }
 @keyframes rest-breathe { 50% { transform: scale(1.08); } }
-
-/* ---------- 설정 들어가기: 3초 꾹 누르기 ---------- */
-.hold-btn { position: relative; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.hold-fill { position: absolute; left: 0; bottom: 0; width: 100%; height: 0; background: rgba(46, 158, 91, .45); pointer-events: none; }
-.hold-btn.holding .hold-fill { height: 100%; transition: height 3s linear; }
-
-.gate { display: grid; gap: 16px; align-content: start; }
-.gate-lead { margin: 8px 0 0; font-size: 20px; text-align: center; }
-.gate-form { display: grid; gap: 12px; justify-items: center; }
-.gate-q { font-family: var(--font-head); font-size: 40px; }
-.gate-form input { width: 160px; min-height: 72px; font-size: 40px; text-align: center; font-family: var(--font-head); border: var(--stroke); }
 
 /* ---------- 설정 ---------- */
 .settings { display: grid; gap: 14px; }
@@ -1599,7 +1597,7 @@ body[data-anim="off"] .reveal { opacity: 1; transform: none; }
 @keyframes buddy-blink { 0%, 93% { opacity: 0; } 94%, 97% { opacity: 1; } 98%, 100% { opacity: 0; } }
 
 /* 스와이프 효과 캔버스: 누르기는 그대로 아래로 통과해요. */
-#fx-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
+#fx-layer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
 .fx-page {
   position: fixed; z-index: 45; pointer-events: none; overflow: hidden; background: var(--surface);
   box-shadow: 0 0 30px rgba(0, 0, 0, .25); backface-visibility: hidden;
