@@ -19,6 +19,7 @@ function genRng(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   const r = {
+    next,
     int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)),
     pick: (arr) => arr[Math.floor(next() * arr.length)],
     shuffle: (arr) => {

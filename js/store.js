@@ -47,7 +47,7 @@ const ROLE_NAME = { student: '학생', leader: '지도자' };
 class StorageError extends Error {}
 
 function todayStr(d) {
-  const t = d || new Date();
+  const t = d || (typeof hgNow === 'function' ? hgNow() : new Date());
   const y = t.getFullYear();
   const m = String(t.getMonth() + 1).padStart(2, '0');
   const day = String(t.getDate()).padStart(2, '0');
@@ -158,6 +158,7 @@ const Store = {
       birth: u.birth || '',
       grade,
       motion: !u.settings || u.settings.motion !== false,
+      level: (u.settings && u.settings.level) || null,
       students: role === 'leader' ? (u.students || []).filter((s) => db.users[s]) : [],
     };
   },
@@ -180,9 +181,12 @@ const Store = {
     if (!f.password || f.password.length < 4) throw new Error('비밀번호는 4자 이상으로 정해 주세요.');
     if (f.password2 !== undefined && f.password !== f.password2) throw new Error('비밀번호가 서로 달라요. 다시 확인해 주세요.');
     if (!f.agree) throw new Error('개인정보 수집 · 이용에 동의해 주세요.');
+    // 학년: 레벨 테스트 범위(그 학년까지)를 정할 때 써요.
+    const grade = [1, 2, 3].includes(f.grade) ? f.grade : gradeFromBirth(birth);
 
     if (Cloud.on) {
       await Cloud.signUp({ id, role, name, birth, password: f.password });
+      if (role === 'student') this.setProfile({ grade });
       return this._user(Cloud.mem, id);
     }
 
@@ -192,8 +196,8 @@ const Store = {
     const now = new Date().toISOString();
     db.users[id] = { id, role, name, birth, password: f.password, agreedAt: now, createdAt: now, settings: { motion: true } };
     if (role === 'student') {
-      db.users[id].profile = { name, grade: gradeFromBirth(birth) };
-      db.data[id] = this._blankData();
+      db.users[id].profile = { name, grade };
+      db.data[id] = { ...this._blankData(), profile: { grade } };
     } else {
       db.users[id].students = [];
     }
@@ -349,12 +353,13 @@ const Store = {
       const s = this._user(db, id);
       const data = this._dataOf(db, id);
       const solved = data.records.filter((r) => r.date === today).length;
-      const thirsty = CHAPTERS.filter((ch) => this._gardenView(data, ch).wilted).length;
+      const thirsty = Object.values(data.friends || {}).filter((f) => f.next && f.next <= today).length;
       const last = data.studyDays.length ? [...data.studyDays].sort().pop() : null;
       if (solved) out.push({ icon: '✏️', id, text: `${s.name} 학생이 오늘 ${solved}문제를 풀었어요.` });
-      if (thirsty) out.push({ icon: '🥀', id, text: `${s.name} 학생의 텃밭에 복습을 기다리는 식물이 ${thirsty}개 있어요.` });
+      if (thirsty) out.push({ icon: '🥀', id, text: `${s.name} 학생을 기다리는 친구(복습)가 ${thirsty}명 있어요.` });
       if (last && diffDays(last, today) >= 3) out.push({ icon: '📅', id, text: `${s.name} 학생이 ${diffDays(last, today)}일 동안 공부하지 않았어요.` });
       if (!last) out.push({ icon: '🌱', id, text: `${s.name} 학생이 아직 공부를 시작하지 않았어요.` });
+      if (!data.placement) out.push({ icon: '📝', id, text: `${s.name} 학생이 아직 레벨 테스트를 하지 않았어요.` });
     });
     return out;
   },
@@ -715,8 +720,9 @@ const Store = {
 
     const sessions = {};
     rs.forEach((r) => {
-      if (r.mode !== 'sub' || !r.sess) return;
-      sessions[r.sess] = (sessions[r.sess] || 0) + (r.hint || 0);
+      if (!['sub', 'sim', 'review'].includes(r.mode) || !r.sess) return;
+      const k = `${r.sess}|${r.concept || r.sub}`; // 소단원(개념)을 한 번 풀 때 본 힌트 수
+      sessions[k] = (sessions[k] || 0) + (r.hintLv !== undefined ? r.hintLv : r.hint || 0);
     });
     const sessHints = Object.values(sessions);
 
@@ -786,5 +792,168 @@ const Store = {
     if (d.solo > 0) headline = ['혼자 해결하는 문제가 늘었어요!', `${word}보다 적은 도움으로 문제를 풀고 있습니다.`];
 
     return { student, range, period, total: now.total, solo: now.solo, hintAvg: now.hintAvg, delta: d, types, graph, points, headline };
+  },
+
+  /* ================= 한걸음 시뮬레이션: 학습 수준 · 친구 · 진행 상태 ================= */
+
+  /**
+   * 지금 학습 수준 (과목마다 학년 · 학기). 학생 화면에는 보여 주지 않고 지도자 화면에서만 보여요.
+   *  - 레벨 테스트 결과(data.placement)와 지도자가 바꾼 값(settings.level) 중 더 나중 것을 써요.
+   * @returns {{math:{grade,term,at,source}, korean:{...}} | null} 레벨 테스트 전이면 null
+   */
+  placementOf(id) {
+    const db = this._read();
+    const sid = id || db.session;
+    if (!sid || !db.users[sid]) return null;
+    const data = this._dataOf(db, sid);
+    const own = data.placement || null;
+    const lead = (this._user(db, sid) || {}).level || null;
+    if (!own && !lead) return null;
+    const out = {};
+    SUBJECTS.forEach(({ id: subj }) => {
+      const a = own && own[subj];
+      const b = lead && lead[subj];
+      out[subj] = (b && (!a || (b.at || 0) >= (a.at || 0)) ? { ...b, source: 'leader' } : a) || { grade: 1, term: 1, at: 0, source: 'default' };
+    });
+    return out;
+  },
+
+  /** 레벨 테스트 · 다음 교실로 갈 때 학생이 직접 저장해요. */
+  setPlacement(patch, source) {
+    const db = this._read();
+    if (!db.session) throw new Error('로그인이 필요해요.');
+    const data = this._myData(db);
+    const cur = this.placementOf() || {};
+    const at = Date.now();
+    data.placement = { ...(data.placement || {}) };
+    SUBJECTS.forEach(({ id }) => {
+      if (!data.placement[id] && cur[id]) data.placement[id] = { grade: cur[id].grade, term: cur[id].term, at: cur[id].at || 0 };
+    });
+    Object.entries(patch).forEach(([subj, v]) => (data.placement[subj] = { grade: v.grade, term: v.term, at, source }));
+    if (source === 'test') data.levelTest = { at, ...(patch.result || {}) };
+    delete data.placement.result;
+    this._write(db);
+  },
+
+  /** 지도자: 학생의 학습 학년 · 학기 바꾸기 */
+  async setStudentLevel(studentId, subject, grade, term) {
+    const db = this._read();
+    const me = this._leader(db);
+    if (!me.students.includes(studentId)) throw new Error('내 학생 목록에 없는 학생이에요.');
+    const u = db.users[studentId];
+    const level = { ...((u.settings && u.settings.level) || {}), [subject]: { grade, term, at: Date.now() } };
+    if (Cloud.on) await Cloud.setStudentLevel(studentId, level);
+    u.settings = { ...(u.settings || {}), level };
+    if (!Cloud.on) this._write(db);
+  },
+
+  /** 이 학생의 데이터 (지도자 화면에서 학생 것을 읽을 때) */
+  dataOf(id) {
+    const db = this._read();
+    return this._dataOf(db, id || db.session);
+  },
+
+  /** 진행 중인 시뮬레이션 (쉬는 시간 · 나갔다 와도 그 자리부터) */
+  sim(key) {
+    const d = this.getData();
+    return (d.sims && d.sims[key]) || null;
+  },
+
+  saveSim(key, sim) {
+    const db = this._read();
+    if (!db.session) return;
+    const data = this._myData(db);
+    data.sims = data.sims || {};
+    if (sim) data.sims[key] = sim;
+    else delete data.sims[key];
+    this._write(db);
+  },
+
+  /** 이 단원에서 만나는 친구 (처음 만날 때 정하고 저장해요) */
+  castFriend(chapterId) {
+    const db = this._read();
+    const data = this._myData(db);
+    data.cast = data.cast || {};
+    if (!data.cast[chapterId]) {
+      data.cast[chapterId] = nextFriendId(Object.values(data.cast));
+      this._write(db);
+    }
+    return data.cast[chapterId];
+  },
+
+  /**
+   * 시뮬레이션에서 푼 문제 기록 (첫 시도 결과 · 시도 횟수 · 힌트 단계 · 오답 유형 · 변형 여부 · 걸린 시간)
+   * 기록이 쌓이면 학습 방식(유형 비율)을 다시 평가해요.
+   */
+  recordSim(q, info) {
+    const db = this._read();
+    if (!db.session) throw new Error('로그인이 필요해요.');
+    const data = this._myData(db);
+    const today = todayStr();
+    data.records.push({
+      qid: q.id,
+      chapterId: q.chapterId,
+      subject: q.subject,
+      grade: q.grade,
+      type: q.type,
+      level: q.level,
+      sub: q.sub,
+      concept: `${q.chapterId}:${q.sub}`,
+      correct: !!info.firstCorrect,
+      final: !!info.finalCorrect,
+      tries: info.tries,
+      hint: info.hintLv > 0 ? 1 : 0,
+      hintLv: info.hintLv,
+      wrong: info.wrong || null,
+      variant: !!info.variant,
+      story: !!q.story,
+      mode: info.mode,
+      sess: info.sess,
+      rep: info.rep,
+      input: info.input,
+      ms: info.ms,
+      date: today,
+      at: Date.now(),
+    });
+    if (!data.studyDays.includes(today)) data.studyDays.push(today);
+    if (info.mode !== 'test') {
+      const mix = Mastery.evaluate(data);
+      if (mix) data.typeMix = mix;
+    }
+    this._write(db);
+  },
+
+  /** 사회성 선택 기록 (교과 점수와 따로 관리해요) */
+  recordSocial(entry) {
+    const db = this._read();
+    if (!db.session) return;
+    const data = this._myData(db);
+    data.social = [...(data.social || []), { ...entry, at: Date.now(), date: todayStr() }].slice(-300);
+    this._write(db);
+  },
+
+  /** 단원 완료 → 친구가 돼요. 첫 복습은 다음 날. */
+  makeFriend(chapterId, info) {
+    const db = this._read();
+    const data = this._myData(db);
+    data.friends = data.friends || {};
+    const today = todayStr();
+    const sched = Mastery.firstReview(today);
+    data.friends[chapterId] = { friendId: info.friendId, madeAt: today, M: info.M, lowConf: !!info.lowConf, reviews: [], ...sched };
+    this._write(db);
+  },
+
+  /** 복습을 마치면 숙달도를 다시 계산하고 다음 복습 날을 정해요. */
+  finishReview(chapterId, before) {
+    const db = this._read();
+    const data = this._myData(db);
+    const f = data.friends && data.friends[chapterId];
+    if (!f) return null;
+    const scores = Mastery.chapterScores(data, chapterId);
+    const after = { M: Math.round(mean(scores.map((s) => s.M))), C: Math.round(mean(scores.map((s) => s.C))) };
+    const sched = Mastery.afterReview(f, before, after, todayStr());
+    data.friends[chapterId] = { ...f, ...sched, M: after.M, reviews: [...(f.reviews || []), { date: todayStr(), before, after: after.M, C: after.C }].slice(-20) };
+    this._write(db);
+    return { after, sched };
   },
 };

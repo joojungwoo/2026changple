@@ -47,7 +47,6 @@ function screenSettings() {
           ${PROFILE_AVATARS.map((a) => `<button type="button" role="radio" aria-checked="${a === pf.avatar}" class="avatar ${a === pf.avatar ? 'on' : ''}" data-pf="avatar" data-val="${a}" aria-label="아바타 ${a}">${a}</button>`).join('')}
         </div>
       </section>
-      ${settingGroup('grade', '학년')}
 
       <section class="set-block">
         <h3>학습 모드</h3>
@@ -62,9 +61,8 @@ function screenSettings() {
             .join('')}
         </div>
       </section>
-      ${pf.mode === 'focus' ? settingGroup('focusMin', '한 번에 공부하는 시간', `시간이 지나면 풀던 문제까지만 하고 쉬어요. 한 번에 ${FOCUS_COUNT}문제까지 풀어요.`) : ''}
 
-      ${settingGroup('rep', '기본으로 보는 방법', '문제를 풀다가 위쪽 버튼으로 바꿔 볼 수도 있어요.')}
+      ${settingGroup('rep', '기본으로 보는 방법', '문제를 풀다가 카드 아래 버튼으로 바꿔 볼 수도 있어요.')}
       ${settingGroup('font', '글자 크기')}
       ${settingGroup('ttsRate', '읽어 주기 속도', '', '<button type="button" class="btn btn-block set-try" data-tts-try>🔊 들어 보기</button>')}
       ${settingGroup('layout', '화면 배치', '자동은 iPad를 돌리는 방향을 따라가요. 가로면 문제와 풀이가 나란히 보여요.')}
@@ -89,7 +87,7 @@ function screenSettings() {
       return render();
     }
     if (ev.target.closest('[data-tts-try]')) {
-      if (!Speech.read([{ text: '안녕! 나는 새싹이야. 이 빠르기로 읽어 줄게.' }])) toast('이 기기에서는 읽어 주기를 쓸 수 없어요.', 'error');
+      if (!Speech.read([{ text: '안녕! 나는 지아야. 이 빠르기로 읽어 줄게.' }])) toast('이 기기에서는 읽어 주기를 쓸 수 없어요.', 'error');
     }
   });
 

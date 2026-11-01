@@ -14,3 +14,11 @@ window.HG_CONFIG = {
   supabaseKey: 'sb_publishable_2PKrOveqZfIlEM6E86eAYQ_Ny53yOJ7',
   emailDomain: 'hangeoleum.app',
 };
+
+// 개발 · 시연: 주소에 ?local 을 붙이면 서버 없이 이 기기 안에서만 동작해요. (탭을 닫으면 원래대로)
+try {
+  if (new URLSearchParams(location.search).has('local')) sessionStorage.setItem('hg-local', '1');
+  if (sessionStorage.getItem('hg-local')) window.HG_CONFIG = {};
+} catch (e) {
+  /* 저장소를 못 쓰면 원래 설정 그대로 */
+}

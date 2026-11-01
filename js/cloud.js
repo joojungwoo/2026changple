@@ -115,7 +115,7 @@ const Cloud = {
       name: p.name,
       birth: (priv && priv.birth) || '',
       profile: { name: p.name, grade: p.grade },
-      settings: { motion: p.motion !== false },
+      settings: { motion: p.motion !== false, level: p.level || null },
       students: [],
       cloud: true,
     };
@@ -307,6 +307,12 @@ const Cloud = {
     if (error) throw cloudError(error, '설정을 바꾸지 못했어요. 잠시 후 다시 해 주세요.');
     const u = this.mem.users[loginId];
     u.settings = { ...(u.settings || {}), motion: !!on };
+  },
+
+  /** 지도자: 학생의 학습 학년 · 학기 (profiles.level, supabase/schema.sql의 set_student_level) */
+  async setStudentLevel(loginId, level) {
+    const { error } = await this.sb.rpc('set_student_level', { sid: this.uuidOf[loginId], lv: level });
+    if (error) throw cloudError(error, '학습 수준을 바꾸지 못했어요. (관리자: supabase/schema.sql을 다시 실행해 주세요)');
   },
 
   async addInquiry(text) {
