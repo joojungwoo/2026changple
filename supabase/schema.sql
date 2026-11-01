@@ -220,6 +220,17 @@ grant select, insert on public.inquiries to authenticated;
 grant select, insert on public.messages to authenticated;
 grant select, insert, update, delete on public.chat_reads to authenticated;
 
+-- 지도자가 학생의 학습 학년 · 학기를 바꿔요. (레벨 테스트 결과보다 나중에 바꾼 것이 쓰여요)
+alter table public.profiles add column if not exists level jsonb;
+create or replace function public.set_student_level(sid uuid, lv jsonb) returns void
+  language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_my_student(sid) then raise exception '내 학생 목록에 없는 학생이에요.'; end if;
+  update public.profiles set level = lv where id = sid;
+end $$;
+revoke execute on function public.set_student_level(uuid, jsonb) from anon, public;
+grant execute on function public.set_student_level(uuid, jsonb) to authenticated;
+
 revoke execute on function public.add_student(text), public.set_student_motion(uuid, boolean) from anon, public;
 grant execute on function public.add_student(text), public.set_student_motion(uuid, boolean) to authenticated;
 

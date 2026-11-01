@@ -1,28 +1,18 @@
 /* =========================================================================
  * app.js — 화면 렌더링 및 흐름 제어
  *
- * 스플래시 → 로그인(학생 / 지도자 탭) · 회원가입
+ * 스플래시 → 로그인(학생 / 지도자 탭) · 회원가입(학년 포함)
  *
- * 학생
- *   홈(과목 선택 들판) → 텃밭(단원 하나 = 밭 한 칸)
- *     → 소단원 학습(물 게이지 · 1-1 · 1-2 · 1-3 · MAX) → 팝업 → 개념 보기 / 문제 풀기 → 결과
- *   탭바(홈에서만): 게임 · 홈 · 채팅(chat.js)
- *   5분 동안 터치가 없으면 운동 시간(motion.js)
+ * 학생 — 친구 사귀기 학교생활 시뮬레이션 (school.js · sim.js)
+ *   처음 한 번: 10문항 레벨 테스트 → 과목마다 학습 시작점(학년 · 학기). 학생 화면에는 학년을 보여 주지 않아요.
+ *   복도(홈): 수학 · 국어 교실 문 → 교실: 대단원 = 친구 자리
+ *     → 대화(이야기 · 개념 설명 · 사회성 선택지) ↔ 문제(숫자/블록 · 힌트 · 색 카드 · 제출하기)
+ *     → 숙달 기준에 닿으면 친구가 돼요. 복습은 친구의 재회 요청(느낌표)으로만 시작해요.
+ *   어느 화면에서나 "잠깐 쉬는 시간!" → 쉬었다가 그 자리부터 이어서
  *
  * 지도자 (학부모 · 선생님)
  *   학생 리스트(+ 학생 아이디로 추가) · 알림 · 문의하기
- *     → 학생 설정(집중력 환기 on/off) → 성과 리포트(이번 주 · 이번 달 · 올해)
- *
- * 텃밭 규칙 (store.js)
- *  - 공부를 시작하면 씨앗, 소단원을 모두 끝내면(1회독) 새싹.
- *  - 스스로 다시 공부(회독 퀴즈)하면 나무 → 열매로 자라요. 회독마다 문제가 바뀌어요.
- *  - 복습할 때가 되면 식물이 시들고 "물을 줘ㅠㅠ" 말풍선이 떠요.
- *    물 주기(복습)는 시든 식물을 원래대로 돌려놓기만 해요. 자라지는 않아요.
- *  - MAX: 학교에서 이미 배웠다면 교과서 문제 10개로 물을 한 번에 채워요.
- *
- * 화면에서 지킨 것
- *  - 타이머·카운트다운 없음. 문제 유형 · 난이도는 화면에 보여 주지 않아요.
- *  - 실패 표현을 순화하고 즉시 풀이를 보여 줘요.
+ *     → 학생 설정(학습 수준 확인 · 바꾸기) → 성과 리포트(독립 해결률 · 힌트 · 유형별 성취도 · 성장 그래프 · 성장 포인트 · 개념별 숙달도)
  * ========================================================================= */
 
 const app = document.getElementById('app');
@@ -36,30 +26,27 @@ const State = {
   term: 1, // 학기 (단원 길 위쪽 칩)
   menu: null, // 단원 길 위쪽 펼침 메뉴: 'grade' | 'term'
   chapterId: null,
-  subIdx: null, // 개념 보기에서 보여 줄 소단원
-  sheet: null, // 소단원 화면 위 팝업: { kind: 'sub', idx } | { kind: 'max' }
-  gameId: null,
-  chatWith: null, // 채팅방 상대
+  sheet: null, // 화면 위 팝업: { kind: 'rest' } | { kind: 'reunion', ... }
+  madeFriend: null, // 방금 친구가 된 친구 id
+  roomSay: null, // 교실에서 친구가 하는 짧은 말
   // 지도자
   studentId: null,
   range: 'week', // 성과 리포트 기간
   adding: false, // 학생 추가 칸 열림
-  // 문제 풀이 세션
-  quiz: null, // { mode, sess, questions[], index, selected, checked, correct, hintOpen, hintUsed, results[], chapterId, sub, backTo, startedAt, before, outcome }
+  // 지금 문제 (시뮬레이션의 문제 장면 하나)
+  quiz: null,
 };
 
 /** 로그인 없이 볼 수 있는 화면 */
 const PUBLIC_SCREENS = ['splash', 'loading', 'intro', 'login', 'signup'];
 /** 피그마 무대(stage.js)로 그리는 화면 */
-const FIGMA_SCREENS = ['splash', 'loading', 'home', 'garden', 'unit', 'games', 'lesson', 'ending'];
+const FIGMA_SCREENS = ['splash', 'loading'];
+/** 학교 화면 (school.js) */
+const SCHOOL_SCREENS = ['home', 'room', 'talk', 'quiz', 'friendmade'];
 /** 화면 사이를 오갈 때 펼친 메뉴는 닫아요. */
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
 
-const STAGE_NAME = { empty: '빈 밭', seed: '씨앗', sprout: '새싹', tree: '나무', fruit: '열매' };
-const STAGE_ICON = { sprout: pxIcon('sprout'), tree: pxIcon('tree'), fruit: pxIcon('fruit') };
-/** 복습할 때가 된 식물이 하는 말 */
-const THIRSTY_BUBBLE = '물을 줘ㅠㅠ';
 
 /* ------------------------------- 유틸 ------------------------------- */
 const esc = (s) =>
@@ -134,16 +121,13 @@ function homeOf(user) {
   return user.role === 'leader' ? 'leader' : 'home';
 }
 
-/* ------------------------------ 그림 ------------------------------ */
-
-/* 새싹 · 식물 · 아이콘 · 강 그림은 js/pixel.js에 있어요 (sproutLogo, plantSvg, pxIcon, pixelRiver). */
-
-/** 물 게이지 칸 */
-function waterCells(view) {
-  return `<span class="cells" role="img" aria-label="물 ${view.water}칸 / ${view.subs.length}칸">
-    ${view.subs.map((s) => `<i class="${s.cleared ? 'on' : ''}"></i>`).join('')}
-  </span>`;
+/** 학생: 레벨 테스트를 아직 안 했으면 테스트부터, 했으면 복도로 */
+function enterStudent() {
+  if (!Store.placementOf()) return Sim.openTest();
+  go('home');
 }
+
+/* ------------------------------ 그림 ------------------------------ */
 
 /* ------------------------------ 공통 조각 ------------------------------ */
 
@@ -171,11 +155,6 @@ function pill(kind, icon, text) {
   return `<span class="pill ${kind}"><span class="ico">${icon}</span>${esc(String(text))}</span>`;
 }
 
-/** 학생 탭바 (무대 밖 화면용): 피그마 탭바를 화면 아래에 고정해요. 무대 화면은 ui.js의 fTabbar를 써요. */
-function tabbar(active) {
-  return `<div class="fixed-bottom"><div class="zoomed">${fTabbar(active)}</div></div><div class="tabbar-space" aria-hidden="true"></div>`;
-}
-
 /* ============================ 0. 스플래시 ============================ */
 
 let splashTimer;
@@ -185,10 +164,11 @@ function leaveSplash() {
   // 서버에서 예전 로그인을 확인하는 중이면 로딩 화면을 보여 주고 끝날 때까지 기다려요.
   if (!Cloud.restored) {
     if (State.screen === 'splash') go('loading');
-    return Cloud.ready.then(() => ((Cloud.restored = true), safely(() => Store.syncGarden()), leaveSplash()));
+    return Cloud.ready.then(() => ((Cloud.restored = true), leaveSplash()));
   }
   const user = Store.currentUser();
   if (!user) return go('intro');
+  if (user.role === 'student') return enterStudent();
   go(homeOf(user), { grade: user.grade });
 }
 
@@ -250,6 +230,12 @@ function screenSignup() {
             <span>생년월일</span>
             <input type="date" name="birth" max="${todayStr()}" />
           </label>
+          <label class="field" data-student-only ${State.role === 'leader' ? 'hidden' : ''}>
+            <span>학년 <small>(학생만)</small></span>
+            <select name="grade">
+              <option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option>
+            </select>
+          </label>
           <label class="field">
             <span>아이디 <small>(영어 소문자 · 숫자 4~20자)</small></span>
             <input type="text" name="id" placeholder="예: jiwoo12" maxlength="20" autocomplete="username" autocapitalize="none" />
@@ -275,107 +261,39 @@ function screenSignup() {
     </div>`;
 }
 
-/* ========================= 3. 홈 (과목 선택 들판) ========================= */
+/* ========================== 문제 풀이 도우미 ==========================
+ * 화면은 school.js의 screenQuiz. 손글씨(pencil.js)도 이 도우미들을 써요.
+ * ===================================================================== */
 
-
-
-/* ========================= 4. 텃밭 (단원 = 밭) ========================= */
-/* ========================== 6. 개념 학습 ========================== */
-
-/* ========================== 7. 문제 풀기 ========================== */
-function startQuiz(mode, questions, opts) {
-  if (!questions.length) {
-    toast('풀 수 있는 문제가 없어요.', 'error');
-    return;
-  }
-  const o = opts || {};
-  const m = Profile.mode();
-  let list = questions;
-  // 단시간 집중 모드: 아직 안 푼 문제부터 몇 개만 풀어요. 나머지는 다음 번에 이어서 해요.
-  if (m.focus && mode !== 'max' && list.length > FOCUS_COUNT) {
-    const solved = new Set(Store.getData().records.map((r) => r.qid));
-    list = [...list.filter((q) => !solved.has(q.id)), ...list.filter((q) => solved.has(q.id))].slice(0, FOCUS_COUNT);
-  }
-  // 틀리는 친구: 계산 문제가 있으면 끝에 '친구 돕기' 한 문제를 붙여요. (집중 모드 · MAX는 빼요)
-  const friend = !m.focus && mode !== 'max' ? Friend.pick(list) : null;
-  if (friend) list = [...list, friend];
-  // 그림 띠의 단계: 개념을 보고 왔는지, 친구 돕기가 있는지에 따라 달라요.
-  const plan = sessionPlan(mode, { focus: !!m.focus, concept: State.screen === 'lesson', friend: !!friend });
-  go('quiz', {
-    chapterId: o.chapterId,
-    quiz: {
-      mode,
-      sess: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      chapterId: o.chapterId,
-      sub: o.sub !== undefined ? o.sub : null,
-      backTo: o.backTo || 'unit',
-      questions: list,
-      plan,
-      index: 0,
-      results: [],
-      startedAt: Date.now(),
-      // 단시간 집중 모드: 이 시간이 지나면 지금 문제까지만 풀고 쉬어요. (화면에 시계는 없어요)
-      focusUntil: m.focus ? Date.now() + Profile.get().focusMin * 60000 : null,
-      before: Store.chapterGarden(o.chapterId),
-      outcome: null,
-      rep: null, // 문제 풀이 중에 바꾼 표현 방식 (없으면 프로필의 기본값)
-      ...freshQuestionState(),
-    },
-  });
-}
-
-/** 문제 하나를 시작할 때의 상태 */
-function freshQuestionState() {
-  return {
-    selected: null, // 터치 선택: 고른 보기 번호
-    typed: '', // 숫자패드: 쓰고 있는 수
-    tries: [], // 한 번 틀린 답 (그 다음에 다시 고를 수 있어요)
-    why: null, // 틀린 이유 도움말
-    checked: false,
-    correct: false,
-    hintOpen: false,
-    hintUsed: false,
-    shownAt: Date.now(),
-    readKey: null, // 소리 도움 모드: 이미 읽어 준 화면
-    restAsked: false, // 단시간 집중 모드: "잠깐 쉴까?"를 물어봤는지
-    friendStage: 'look', // 친구 돕기: look 틀린 곳 찾기 → fix 바른 답 쓰기
-    friendSay: null,
-    friendOk: 0,
-    ink: null, // 손글씨 (pencil.js)
-    inkSave: null,
-  };
-}
-
-function quizTitle(q) {
-  if (q.mode === 'review') return `${pxIcon('drop')} 물 주기`;
-  if (q.mode === 'max') return '⚡ MAX 도전';
-  if (q.mode === 'pass') return `${STAGE_ICON[STAGES[q.before.passCount + 2]] || pxIcon('sprout')} ${q.before.passCount + 1}회독`;
-  const s = CHAPTER_BY_ID[q.chapterId].subunits[q.sub];
-  return `${s.no} ${esc(s.title)}`;
-}
-
-/** 진행 칸: 문제마다 한 칸. 답을 확인하면 한 칸이 차요. */
-/** 진행 칸 (피그마 Step Gauge): 푼 문제 칸은 하늘색, 지금 문제는 흰 테두리 */
-function quizCells(q) {
-  return `<div class="qcells" role="img" aria-label="${q.questions.length}문제 중 ${q.index + 1}번째">
-    ${q.questions.map((_, i) => `<i class="px px-cell ${i < q.results.length ? 'px-track' : 'px-surface'} ${i === q.index ? 'now' : ''}"></i>`).join('')}
-  </div>`;
-}
-
-/** 보기 타일 색 (피그마 Choice Tile: 빨강 · 노랑 · 파랑 · 보라) */
-const CHOICE_COLORS = ['red', 'yellow', 'blue', 'purple'];
 
 /**
  * 지금 문제의 문제 데이터 · 표현 방식 · 입력 방식
  *  - 표현: 문제 풀이 중에 바꾼 것 → 프로필 기본값 → 숫자(글자)
  *  - 입력: 학습 모드의 입력 → 안 되는 문제면 숫자패드 → 터치 선택
  */
+/** 문제 하나를 시작할 때의 상태 */
+function freshQuestionState() {
+  return {
+    selected: null, // 고른 카드 번호
+    typed: '', // 숫자패드: 쓰고 있는 수
+    tries: [], // 한 번 틀린 답
+    checked: false,
+    correct: false,
+    hintUsed: false,
+    shownAt: Date.now(),
+    readKey: null, // 소리 도움 모드: 이미 읽어 준 화면
+    ink: null, // 손글씨 (pencil.js)
+    inkSave: null,
+  };
+}
+
 function quizParts() {
   const q = State.quiz;
   const item = q.questions[q.index];
   const p = Problem.from(item);
   const rep = pickRep(p, q.rep || Profile.get().rep);
-  const input = q.mode === 'max' && Profile.mode().input === 'pencil' ? pickInput(p, 'pencil') : pickInput(p, Profile.mode().input);
+  // 펜슬 모드: 손글씨 → (안 되면) 숫자패드 → 색 카드
+  const input = pickInput(p, Profile.mode().input);
   return { q, item, p, rep, input };
 }
 
@@ -384,41 +302,6 @@ function quizResponse(parts) {
   const { q, input } = parts;
   if (input === 'choice') return q.selected === null ? null : { kind: 'choice', index: q.selected };
   return q.typed === '' ? null : { kind: 'number', value: Number(q.typed) };
-}
-
-function repToggle(p, rep) {
-  const ids = repsFor(p);
-  if (ids.length < 2) return '';
-  return `<div class="rep-toggle" role="group" aria-label="보는 방법">
-    ${ids.map((id) => `<button type="button" class="${id === rep ? 'on' : ''}" data-rep="${id}" aria-pressed="${id === rep}">
-        <span aria-hidden="true">${REPS[id].icon(p)}</span>${REPS[id].label(p)}</button>`).join('')}
-  </div>`;
-}
-
-/** 답을 내는 곳: 터치 선택 */
-function inputChoice(parts) {
-  const { q, item } = parts;
-  const tried = new Set(q.tries.map((t) => t.index));
-  // 선택지가 모두 짧으면 두 칸씩 크게, 길면 한 줄에 하나씩 보여 줘요.
-  const grid = item.choices.every((c) => [...c].length <= 9 && c.indexOf('\n') < 0);
-  return `<div class="choices ${grid ? 'grid' : ''}">
-    ${item.choices
-      .map((c, i) => {
-        const color = CHOICE_COLORS[i % 4];
-        // 피그마 Answer Button: 고르면 그림자 없이 내려앉고, 정답은 초록 + 기호. (오답은 빨강 대신 흐린 점선 + 🤔)
-        let cls = `choice c${i % 4} px px-tile px-${color}`;
-        let mark = '';
-        if (q.checked) {
-          if (i === item.answer) (cls = `choice correct px px-tile px-success`), (mark = '<span class="choice-mark">⭐ 정답</span>');
-          else cls += ' dim';
-        } else if (tried.has(i)) (cls = `choice tried px px-tiled px-surface`), (mark = '<span class="choice-mark">🤔 다시</span>');
-        else if (q.selected === i) (cls = `choice selected px px-tiled px-${color}`), (mark = '<span class="choice-mark">👆</span>');
-        return `<button class="${cls}" data-choice="${i}" ${q.checked || tried.has(i) ? 'disabled' : ''}>
-            <span class="choice-text" data-read>${nl(c)}</span>${mark}
-          </button>`;
-      })
-      .join('')}
-  </div>`;
 }
 
 /** 답을 내는 곳: 숫자패드 */
@@ -444,169 +327,14 @@ function inputNumpad(parts) {
   </div>`;
 }
 
-function screenQuiz() {
-  const parts = quizParts();
-  const { q, item, p, rep, input } = parts;
-  const total = q.questions.length;
-  // MAX는 이미 배운 내용을 확인하는 시험이라 힌트를 숨겨요.
-  const hintAllowed = q.mode !== 'max' && !!item.hint;
-  const answerText = p.answer.kind === 'number' ? `${p.answer.value}${p.answer.unit}` : item.choices[item.answer];
-  const ready = input === 'pencil' ? !!(q.ink && q.ink.strokes.length) && !q.ink.reading : !!quizResponse(parts);
-  const readyLabel = input === 'pencil' ? '다 썼어요!' : '답 고르기 완료!';
-  const waitLabel = input === 'choice' ? '답을 골라 주세요' : '답을 써 주세요';
-
-  const friendLook = item.friend && !q.checked && q.friendStage === 'look';
-  let help = '';
-  if (item.friend && !q.checked) help = friendLook ? friendLookHtml(parts) : friendFixHtml(parts);
-  else if (q.why && !q.checked) help = `<div class="hint-box why" role="status"><span class="hint-icon" aria-hidden="true">🤔</span><p data-read>${esc(q.why)}</p></div>`;
-  else if (hintAllowed && !q.checked) {
-    help = q.hintOpen
-      ? `<div class="hint-box"><span class="hint-icon" aria-hidden="true">💡</span><p data-read>${nl(item.hint)}</p></div>`
-      : `<button class="btn-hint" data-hint>힌트</button>`;
-  }
-
-  let feedback = '';
-  if (q.checked) {
-    let head = q.correct ? (q.tries.length ? '🎉 이번에는 맞혔어요!' : '🎉 정답이에요!') : '💪 괜찮아요, 같이 봐요';
-    if (item.friend) head = q.correct ? `${friendAvatar('happy')} 고마워! 이제 알겠다! 🎉` : `${friendAvatar('think')} 우리 같이 다시 보자!`;
-    feedback = `<section class="feedback ${q.correct ? '' : 'no'}">
-        <div class="fb-head">${head}</div>
-        ${q.correct ? '' : `<p class="fb-answer">⭐ 정답은 <b>${nl(answerText)}</b></p>`}
-        <div class="fb-body">
-          <strong>📖 풀이</strong>
-          <p data-read>${nl(item.solution)}</p>
-        </div>
-        ${!q.results[q.results.length - 1].correct && q.mode !== 'max' ? `<div class="fb-note">${pxIcon('drop')} 이 문제는 다음에 물 줄 때 다시 만나요!</div>` : ''}
-      </section>`;
-  }
-
-  return `
-    <div class="fbg fbg-view" data-bg="meadow" aria-hidden="true"></div>
-    <div class="scene quiz-scene">
-      <header class="scene-top">
-        <button class="round-btn" data-back="${q.backTo}" aria-label="그만하고 돌아가기">‹</button>
-        ${quizCells(q)}
-      </header>
-      ${scheduleStrip(q.plan)}
-      <p class="quiz-title">${quizTitle(q)} · ${q.index + 1} / ${total}</p>
-      ${repToggle(p, rep)}
-
-      <div class="quiz-body">
-        <section class="question-card quiz-problem rep-${rep}">
-          ${REPS[rep].render(p, { checked: q.checked })}
-        </section>
-
-        <main class="scene-ground quiz-work">
-          ${help}
-          ${friendLook ? '' : input === 'pencil' ? inputPencil(parts) : input === 'numpad' ? inputNumpad(parts) : inputChoice(parts)}
-          ${feedback}
-          ${
-            friendLook
-              ? ''
-              : q.checked
-              ? `<button class="btn btn-primary btn-lg btn-block" data-next>${q.index + 1 < total ? '다음 문제 →' : '마치기 🎉'}</button>`
-              : `<button class="btn btn-primary btn-lg btn-block" data-submit ${ready ? '' : 'disabled'}>${ready ? readyLabel : waitLabel}</button>`
-          }
-        </main>
-      </div>
-    </div>
-    ${
-      State.sheet && State.sheet.kind === 'rest-ask'
-        ? `<div class="overlay" data-backdrop><section class="sheet" role="dialog" aria-modal="true" aria-label="잠깐 쉴까요?">
-            <div class="rest-buddy small" aria-hidden="true">${sproutLogo()}</div>
-            <h2>잠깐 쉴까?</h2>
-            <p class="sheet-sub">조금 쉬었다 하면 더 잘 보여요.</p>
-            <div class="btn-col">
-              <button class="btn btn-primary btn-lg" data-rest-now>쉬기</button>
-              <button class="btn btn-lg" data-close-sheet>계속 풀기</button>
-            </div>
-          </section></div>`
-        : ''
-    }`;
-}
-
-/**
- * 답 확인
- *  - 첫 답만 학습 기록에 남겨요. (힌트 없이 스스로 푼 비율을 지도자 리포트에 보여 주려고)
- *  - 틀리면 정답을 바로 보여 주지 않고, 고른 답에 맞는 도움말을 보여 준 뒤 한 번 더 고르게 해요.
- *    MAX는 시험이라 다시 고르지 않아요. 두 번째에도 틀리면 정답과 풀이를 같이 봐요.
- */
-function submitAnswer() {
-  const parts = quizParts();
-  const { q, item, p, rep, input } = parts;
-  const res = quizResponse(parts);
-  if (!res || q.checked) return;
-
-  const correct = judge(p, res);
-  const first = q.tries.length === 0;
-  if (first) {
-    const rec = { mode: item.friend ? 'friend' : q.mode, hint: q.hintUsed, sess: q.sess, rep, input, ms: Date.now() - q.shownAt };
-    const saved = safely(() => Store.recordAnswer(item, correct, rec));
-    if (!saved.ok) return; // 저장 실패 시 진행하지 않음
-    q.results.push({ qid: item.id, correct });
-  }
-  if (q.inkSave) {
-    safely(() => Store.saveInk({ qid: item.id, at: Date.now(), correct, first, ...q.inkSave }));
-    q.inkSave = null;
-  }
-
-  if (!correct && first && q.mode !== 'max') {
-    q.tries.push(res);
-    q.why = whyWrong(p, res);
-    q.selected = null;
-    q.typed = '';
-    if (q.ink) q.ink = { ...freshInk(), penSeen: q.ink.penSeen };
-    return render();
-  }
-  q.checked = true;
-  q.correct = correct;
-  render();
-}
-
-function nextQuestion() {
-  const q = State.quiz;
-  // 단시간 집중 모드: 정해 둔 시간이 지났으면 여기까지 하고 쉬어요.
-  const tired = q.focusUntil && Date.now() > q.focusUntil;
-  if (q.index + 1 < q.questions.length && !tired) {
-    Object.assign(q, freshQuestionState(), { index: q.index + 1 });
-    render();
-    window.scrollTo({ top: 0 });
-    return;
-  }
-  // 세션 끝: 텃밭에 반영
-  const res = safely(() => Store.finishSession({ mode: q.mode, chapterId: q.chapterId, sub: q.sub, results: q.results }));
-  if (res.ok) q.outcome = res.value;
-  // 피그마 엔딩: 물이 쏟아지고 새싹이 반짝여요. 끝나면 쉬는 화면 또는 결과로 가요.
-  q.after = q.focusUntil ? 'rest' : 'result';
-  go('ending');
-}
-
-/** 단시간 집중 모드: 끝나면 쉬는 화면 → 결과 */
-function screenRest() {
-  return `
-    <div class="scene rest-scene">
-      ${scheduleStrip(State.quiz.plan)}
-      <main class="rest-card">
-        <div class="rest-buddy" aria-hidden="true">${sproutLogo()}</div>
-        <h1>잘했어요! 잠깐 쉬어요 🌿</h1>
-        <p>물 한 모금 마시고, 기지개를 쭉 켜 봐요.</p>
-        <button class="btn btn-primary btn-lg btn-block" data-go="result">다 쉬었어요</button>
-      </main>
-    </div>`;
-}
-
 /** 소리 도움 모드: 문제가 바뀌면 문제 → 보기 차례로 읽어 줘요. */
 function readProblem() {
   const parts = [];
   const add = (el) => el && parts.push({ text: el.innerText || el.textContent, el });
   const card = document.querySelector('.quiz-problem');
   if (!card) return;
-  const hidden = card.querySelector('.listen-text:not([open])');
-  card.querySelectorAll('.question-text, .steps li').forEach((el) => {
-    if (hidden && hidden.contains(el)) parts.push({ text: el.textContent, el: card.querySelector('[data-read-problem]') });
-    else add(el);
-  });
-  document.querySelectorAll('.quiz-work .choice:not(:disabled) .choice-text').forEach((el, i) => parts.push({ text: `${i + 1}번, ${el.textContent}`, el }));
+  card.querySelectorAll('.question-text, .steps li:not(.step-hidden)').forEach(add);
+  document.querySelectorAll('.quiz-work .ans-card:not(:disabled) .ans-text').forEach((el, i) => parts.push({ text: `${i + 1}번, ${el.textContent}`, el }));
   Speech.read(parts);
 }
 
@@ -614,141 +342,13 @@ function afterQuizRender() {
   if (State.screen !== 'quiz') return;
   Pencil.mount();
   const q = State.quiz;
-  const key = `${q.index}:${q.tries.length}:${q.checked}`;
+  const key = `${q.orig && q.orig.id}:${q.tries.length}:${q.checked}:${q.hintLv}`;
   if (!Profile.mode().autoRead || q.readKey === key) return;
   q.readKey = key;
-  if (q.checked) {
-    const sol = document.querySelector('.feedback .fb-body p');
-    if (sol) Speech.read([{ text: document.querySelector('.fb-head').textContent, el: null }, { text: sol.textContent, el: sol }]);
-  } else if (q.why) {
-    const why = document.querySelector('.hint-box.why p');
-    if (why) Speech.readEl(why);
+  if (q.say) {
+    const say = document.querySelector('.q-say span');
+    if (say) Speech.readEl(say);
   } else readProblem();
-}
-
-/** 단시간 집중 모드: 한 문제에 평소보다 오래 머물면 먼저 "잠깐 쉴까?"를 물어봐요. */
-function usualAnswerMs() {
-  const ms = Store.getData().records.slice(-30).map((r) => r.ms).filter((x) => x > 0).sort((a, b) => a - b);
-  return ms.length >= 5 ? ms[Math.floor(ms.length / 2)] : 40000;
-}
-
-setInterval(() => {
-  const q = State.quiz;
-  if (State.screen !== 'quiz' || !q || q.checked || q.restAsked || !q.focusUntil || State.sheet) return;
-  if (Date.now() - q.shownAt < Math.max(45000, usualAnswerMs() * 2.5)) return;
-  q.restAsked = true;
-  setSheet({ kind: 'rest-ask' });
-}, 5000);
-
-/* ========================== 8. 결과 화면 ========================== */
-
-/** 결과 제목 · 부제 — 무엇이 바뀌었는지를 가장 먼저 알려 줘요. */
-function resultHeadline(q, before, after) {
-  const max = q.outcome && q.outcome.max;
-  if (max && max.passed) return ['⚡ MAX 통과!', '물이 한 번에 가득 찼어요'];
-  if (max) return ['조금만 더 공부해요', '다시 공부할 소단원을 표시해 뒀어요'];
-  const watered = after.water > before.water;
-  if (after.stage === 'seed' && before.stage === 'empty' && watered) {
-    return [`${pxIcon('drop')} 씨앗을 심고 물을 줬어요!`, `물 ${after.water} / ${after.subs.length}칸 · 가득 채우면 새싹이 나요`];
-  }
-  if (after.stage !== before.stage) {
-    return {
-      seed: ['씨앗을 심었어요!', '소단원을 끝낼 때마다 물을 줄 수 있어요'],
-      sprout: [`${pxIcon('sprout')} 새싹이 났어요!`, '물이 가득 찼어요 · 1회독 완료'],
-      tree: ['🌳 나무로 자랐어요!', '스스로 다시 공부했어요 · 2회독 완료'],
-      fruit: ['🍎 열매가 열렸어요!', '3회독 완료 · 단원을 끝까지 키웠어요'],
-    }[after.stage];
-  }
-  if (q.mode === 'review') {
-    return after.wilted ? [`${pxIcon('drop')} 물을 줬어요!`, '조금 더 주면 다 살아나요'] : [`${pxIcon('drop')} 다시 싱싱해졌어요!`, '시든 식물이 원래대로 돌아왔어요'];
-  }
-  if (watered) return [`${pxIcon('drop')} 물을 줬어요!`, `물 ${after.water} / ${after.subs.length}칸`];
-  return ['잘했어요!', ''];
-}
-
-function screenResult() {
-  const q = State.quiz;
-  const correct = q.results.filter((r) => r.correct).length;
-  const total = q.results.length;
-  const wrong = total - correct;
-  const chapter = CHAPTER_BY_ID[q.chapterId];
-  const before = q.before;
-  const after = (q.outcome && q.outcome.after) || Store.chapterGarden(chapter.id);
-  const max = q.outcome && q.outcome.max;
-  const minutes = Math.max(1, Math.round((Date.now() - q.startedAt) / 60000));
-  const [title, sub] = resultHeadline(q, before, after);
-
-  const week = Store.weekStudy()
-    .map((d) => `<i class="${d.studied ? 'on' : ''} ${d.isToday ? 'today' : ''}">${d.studied && d.isToday ? `${pxIcon('fire')}` : d.label}</i>`)
-    .join('');
-
-  let actions = '';
-  if (max && !max.passed) {
-    actions = `<button class="btn btn-primary btn-lg btn-block" data-go="unit">${pxIcon('pencil')} 표시된 소단원 공부하러 가기</button>`;
-  } else if (q.mode === 'sub') {
-    actions = `
-      <button class="btn btn-gold btn-lg btn-block" data-start-sub="${q.sub}">한 번 더 풀기 🔁</button>
-      <button class="btn btn-primary btn-lg btn-block" data-go="unit">${pxIcon('drop')} 소단원으로</button>`;
-  } else {
-    actions = `<button class="btn btn-primary btn-lg btn-block" data-go="garden">${pxIcon('sprout')} 텃밭으로</button>`;
-  }
-
-  return `
-    <div class="fbg fbg-view" data-bg="meadow" aria-hidden="true"></div>
-    ${q.plan ? scheduleStrip(q.plan) : ''}
-    <main class="page flush result fresult">
-      <h2 class="t-outline">${title}</h2>
-      <p class="result-sub">${chapter.icon} ${chapter.label} ${esc(chapter.title)}${sub ? ` · ${sub}` : ''}</p>
-
-      <div class="result-plant"><img src="${UI_IMG.stage[after.stage]}" alt="${STAGE_NAME[after.stage]}" width="160" height="160"></div>
-      <div class="result-gauge-wrap">${waterGauge(after)}</div>
-
-      ${
-        max && !max.passed
-          ? `<div class="reward-bar red">
-              <span>🔒 MAX가 잠겼어요.<br>아래 소단원을 다시 공부하면 열려요.</span>
-            </div>
-            <div class="weak-chips">
-              ${max.weak.map((i) => `<span class="weak-chip">${chapter.subunits[i].no} ${esc(chapter.subunits[i].title)}</span>`).join('')}
-            </div>`
-          : ''
-      }
-
-      <div class="stat-row" style="margin-top:14px">
-        <div class="stat px px-tile px-surface"><div class="stat-num">${correct} / ${total}</div><div class="stat-label">맞힌 문제</div></div>
-        <div class="stat px px-tile px-surface"><div class="stat-num">${minutes}분</div><div class="stat-label">걸린 시간</div></div>
-      </div>
-
-      ${
-        wrong
-          ? `<div class="reward-bar px px-plate px-surface"><span>💧 틀린 ${wrong}문제는 다음에 물 줄 때 다시 만나요</span></div>`
-          : `<div class="reward-bar px px-plate px-surface"><span>✨ 하나도 틀리지 않았어요!</span></div>`
-      }
-
-      <div class="streak-strip">${week}</div>
-      <p class="muted-note" style="margin:8px 0 0;font-size:14px">${Store.streak()}일 연속 학습 중이에요!</p>
-
-      <div class="result-actions btn-col">
-        ${actions}
-        <button class="btn btn-block" data-go="home">${pxIcon('home')} 홈으로</button>
-      </div>
-    </main>`;
-}
-
-/* ========================== 9. 게임 ========================== */
-
-/** 게임 목록 — games/ 폴더에 게임을 넣고 여기에 한 줄 더하면 돼요. */
-const GAMES = [
-  { id: 'bus', icon: '🚌', name: '버스 타기 국어', desc: '정류장 이름 만들기', src: 'games/bus/index.html' },
-  { id: 'dodgeball', icon: '🤾', name: '피구 뺄셈', desc: '남은 친구 세기', src: 'games/dodgeball/index.html' },
-];
-
-
-function screenPlay() {
-  const g = GAMES.find((x) => x.id === State.gameId);
-  return `
-    ${hud({ back: 'games', title: `${g.icon} ${g.name}` })}
-    <iframe class="game-frame" src="${g.src}" title="${g.name}"></iframe>`;
 }
 
 /* ========================== 10. 지도자: 학생 리스트 ========================== */
@@ -797,19 +397,50 @@ function screenLeader() {
 }
 
 /* ========================== 11. 지도자: 학생 설정 ========================== */
+/**
+ * 학생 설정
+ *  - 학습 수준: 레벨 테스트로 정해진 학년 · 학기를 보여 주고, 지도자가 바꿀 수 있어요. (학생 화면에는 안 보여요)
+ *  - 친구(단원) 현황: 친구가 된 단원 · 복습 날
+ */
 function screenLeaderStudent() {
   const s = Store.myStudent(State.studentId);
+  const place = Store.placementOf(s.id);
+  const data = Store.dataOf(s.id);
+  const test = data.levelTest;
+  const srcName = { test: '레벨 테스트', leader: '지도자가 바꿈', auto: '단원을 다 마치고 다음으로', default: '기본값' };
+  const levelRows = SUBJECTS.map((subj) => {
+    const lv = place && place[subj.id];
+    const opts = levelsOf(subj.id)
+      .map((x) => `<option value="${x.grade}-${x.term}" ${lv && lv.grade === x.grade && lv.term === x.term ? 'selected' : ''}>${levelName(x)}</option>`)
+      .join('');
+    return `<label class="set-row">
+      <span class="set-ico" aria-hidden="true">${subj.icon}</span>
+      <span class="set-body"><strong>${subj.name}</strong><small>${lv ? `${levelName(lv)} · ${srcName[lv.source] || ''}` : '레벨 테스트 전이에요'}</small></span>
+      <select class="lv-select" data-level="${subj.id}" aria-label="${subj.name} 학습 학년 · 학기">${place ? '' : '<option value="">-</option>'}${opts}</select>
+    </label>`;
+  }).join('');
+  const today = todayStr();
+  const friends = Object.entries(data.friends || {}).map(([chId, f]) => ({ ch: CHAPTER_BY_ID[chId], f, who: friendById(f.friendId) })).filter((x) => x.ch);
   return `
     ${hud({ back: 'leader', title: `${esc(s.name)} 설정` })}
     <main class="page settings">
+      <h3 class="set-title">학습 수준</h3>
+      <div class="set-group">${levelRows}</div>
+      <p class="set-help">${test ? `레벨 테스트: ${test.total}문제 중 ${test.correct}문제 정답 (${todayStr(new Date(test.at))})` : '학생이 처음 들어오면 10문항 레벨 테스트를 해요.'}<br>학생 화면에는 학년 · 학기를 보여 주지 않아요. 바꾸면 학생의 교실이 그 학년 · 학기 단원으로 바뀌어요.</p>
+
       <div class="set-group">
-        <label class="set-row">
-          <span class="set-ico" aria-hidden="true">🤸</span>
-          <span class="set-body"><strong>집중력 환기(운동) 기능</strong><small>5분 동안 터치가 없으면 새싹 친구가 운동을 권해요</small></span>
-          <input type="checkbox" class="switch" data-motion-toggle ${s.motion ? 'checked' : ''} aria-label="집중력 환기 기능 켜기" />
-        </label>
-        ${leaderRow({ attr: 'data-go="report"', icon: '📈', title: '성과 리포트', sub: '이번 주 · 이번 달 · 올해' })}
+        ${leaderRow({ attr: 'data-go="report"', icon: '📈', title: '성과 리포트', sub: '독립 해결률 · 힌트 · 유형별 성취도 · 성장 그래프 · 개념별 숙달도' })}
       </div>
+
+      <h3 class="set-title">친구가 된 단원 ${friends.length}개</h3>
+      ${
+        friends.length
+          ? `<div class="set-group">${friends
+              .map(({ ch, f, who }) => `<div class="set-row static"><span class="set-ico" aria-hidden="true">${f.next <= today ? '❗' : '🙂'}</span>
+                <span class="set-body"><strong>${esc(who.name)} · ${esc(ch.title)}</strong><small>${ch.grade}학년 ${getSubject(ch.subject).name} · 숙달도 ${f.M}점 · ${f.next <= today ? '오늘 복습할 차례' : `다음 복습 ${f.next}`}${f.lowConf ? ' · 판단 근거가 부족해 복습을 앞당겼어요' : ''}</small></span></div>`)
+              .join('')}</div>`
+          : '<p class="set-help">아직 친구가 된 단원이 없어요.</p>'
+      }
 
       <div class="set-group">
         <button class="set-row danger" data-remove-student><span class="set-ico" aria-hidden="true">➖</span><span class="set-body"><strong>학생 목록에서 빼기</strong><small>학생의 학습 기록은 지워지지 않아요</small></span></button>
@@ -890,6 +521,8 @@ function screenReport() {
         ${soloChart(r.graph)}
       </section>
 
+      ${reportMastery(r.student.id)}
+
       <section class="rp-card">
         <h3>${rangeName} 성장 포인트</h3>
         ${
@@ -899,6 +532,68 @@ function screenReport() {
         }
       </section>
     </main>`;
+}
+
+/**
+ * 개념별 숙달도 · 판단 신뢰도 · 학습 방식 비율 · 소단원별 힌트 · 사회성 연습 (리포트 아래쪽)
+ */
+function reportMastery(studentId) {
+  const data = Store.dataOf(studentId);
+  const chIds = [...new Set(data.records.filter((r) => r.concept && (r.mode === 'sim' || r.mode === 'review')).map((r) => r.chapterId))];
+  const mix = Mastery.mix(data);
+  const typeRow = MASTERY_TYPES.map((t) => `<div><b>${Math.round(mix.ratio[t])}%</b><span>${QUESTION_TYPES[t].name}</span></div>`).join('');
+  const lastEval = mix.history[mix.history.length - 1];
+  const rows = chIds
+    .map((id) => {
+      const ch = CHAPTER_BY_ID[id];
+      if (!ch) return '';
+      return Mastery.chapterScores(data, id)
+        .map((sc, i) => {
+          const rs = Mastery.records(data, sc.concept);
+          const hintAvg = rs.length ? Math.round((rs.reduce((a, r) => a + (r.hintLv || 0), 0) / rs.length) * 10) / 10 : 0;
+          const ok = Mastery.done(sc);
+          return `<tr><td>${i === 0 ? `<b>${esc(ch.title)}</b><br>` : ''}${esc(ch.subunits[i].title)}</td>
+            <td class="${ok ? 'good' : sc.M >= 75 ? '' : 'soft'}">${sc.n ? sc.M : '-'}</td>
+            <td><span class="conf conf-${sc.level}">${sc.n ? sc.level : '-'}</span></td>
+            <td>${sc.n ? hintAvg : '-'}</td>
+            <td>${sc.n ? (ok ? '숙달' : sc.flags.includes('error') ? '같은 실수 반복' : sc.flags.includes('variant') ? '변형 문제 연습' : sc.flags.includes('hint') ? '힌트 의존' : sc.flags.includes('forgot') ? '기억 유지 필요' : '연습 중') : '-'}</td></tr>`;
+        })
+        .join('');
+    })
+    .join('');
+  const social = data.social || [];
+  const byTheme = {};
+  social.forEach((x) => {
+    const t = (byTheme[x.theme] = byTheme[x.theme] || { n: 0, happy: 0 });
+    t.n += 1;
+    if (x.mood === 'happy') t.happy += 1;
+  });
+  return `
+    <section class="rp-card">
+      <h3>학습 방식 개인화 (유형별 제공 비율)</h3>
+      <div class="rp-types">${typeRow}</div>
+      <p class="rp-foot">${lastEval && lastEval.best ? `최근 평가에서 ${QUESTION_TYPES[lastEval.best].name} 문제의 성과가 높아 비율을 높였어요.` : '유형마다 5문항이 쌓일 때마다 다시 평가해요. 한 유형은 20%~60% 안에서 조정돼요.'}</p>
+    </section>
+    <section class="rp-card">
+      <h3>개념별 숙달도 · 판단 신뢰도</h3>
+      ${
+        rows
+          ? `<div class="rp-table-wrap"><table class="rp-table"><thead><tr><th>개념</th><th>숙달도</th><th>신뢰도</th><th>평균 힌트</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : '<p class="rp-empty">아직 시뮬레이션에서 푼 문제가 없어요.</p>'
+      }
+      <p class="rp-foot">숙달도 75점 이상 · 신뢰도 HIGH(70점 이상) · 힌트 없이 푼 변형 문제 · 반복 오답 없음 → 친구가 돼요. 최초 학습은 복습 항목을 뺀 산식을 써요.</p>
+    </section>
+    <section class="rp-card">
+      <h3>사회성 연습 (친구와의 대화 선택)</h3>
+      ${
+        social.length
+          ? `<ul class="rp-points">${Object.entries(byTheme)
+              .map(([t, v]) => `<li><span aria-hidden="true">💬</span><div><strong>${SOCIAL_NAME[t] || t}</strong><p>${v.n}번 연습 · 친구가 기뻐한 선택 ${v.happy}번</p></div></li>`)
+              .join('')}</ul>`
+          : '<p class="rp-empty">아직 대화 연습 기록이 없어요.</p>'
+      }
+      <p class="rp-foot">대화 선택은 교과 점수와 따로 기록해요. 어떤 선택을 해도 감점되거나 친구가 되는 데 제한이 없어요.</p>
+    </section>`;
 }
 
 /* ========================== 13. 지도자: 알림 · 문의하기 ========================== */
@@ -944,40 +639,34 @@ function screenInquiry() {
 /* ============================== 렌더 ============================== */
 function render() {
   const user = Store.currentUser();
+  const student = user && user.role === 'student';
 
   // 접근 제어
   if (!user && !PUBLIC_SCREENS.includes(State.screen)) State.screen = 'login';
   if (user && user.role === 'leader' && !LEADER_SCREENS.includes(State.screen) && !PUBLIC_SCREENS.includes(State.screen)) State.screen = 'leader';
-  if (user && user.role === 'student' && LEADER_SCREENS.includes(State.screen)) State.screen = 'home';
+  if (student && LEADER_SCREENS.includes(State.screen)) State.screen = 'home';
   if (['lstudent', 'report'].includes(State.screen) && !Store.myStudent(State.studentId)) State.screen = 'leader';
-  if (['unit', 'lesson'].includes(State.screen) && !CHAPTER_BY_ID[State.chapterId]) State.screen = 'home';
-  if (State.screen === 'garden' && !State.subject) State.screen = 'home';
-  if (['quiz', 'result'].includes(State.screen) && !State.quiz) State.screen = 'home';
-  if (State.screen === 'play' && !GAMES.some((g) => g.id === State.gameId)) State.screen = 'games';
-  if (State.screen === 'chatroom' && !Chat.knows(State.chatWith)) State.screen = 'chat';
-  if (['settings', 'rest'].includes(State.screen) && (!user || user.role !== 'student')) State.screen = user ? homeOf(user) : 'login';
-  if (['rest', 'ending'].includes(State.screen) && !State.quiz) State.screen = 'home';
-  if (user && user.role === 'student' && !State.grade) State.grade = user.grade;
+  if (State.screen === 'settings' && !student) State.screen = user ? homeOf(user) : 'login';
+  if (['talk', 'quiz'].includes(State.screen) && !Sim.s) State.screen = 'home';
+  if (State.screen === 'quiz' && !State.quiz) State.screen = 'home';
+  if (State.screen === 'room' && !getSubject(State.subject)) State.screen = 'home';
+  if (State.screen === 'friendmade' && !State.madeFriend) State.screen = 'room';
+  // 레벨 테스트를 안 했으면 교실보다 테스트가 먼저예요.
+  if (student && ['home', 'room', 'friendmade'].includes(State.screen) && !Store.placementOf()) return Sim.openTest();
+  if (student && !State.grade) State.grade = user.grade;
 
   const views = {
     splash: screenSplash,
     login: screenLogin,
     signup: screenSignup,
-    home: screenHome,
-    garden: screenGarden,
-    unit: screenUnit,
-    lesson: screenLesson,
+    home: screenCorridor,
+    room: screenRoom,
+    talk: screenTalk,
     quiz: screenQuiz,
-    result: screenResult,
-    games: screenGames,
-    play: screenPlay,
-    rest: screenRest,
-    ending: screenEnding,
+    friendmade: screenFriendMade,
     loading: screenLoading,
     intro: screenIntro,
     settings: screenSettings,
-    chat: () => Chat.listView(),
-    chatroom: () => Chat.roomView(),
     leader: screenLeader,
     lstudent: screenLeaderStudent,
     report: screenReport,
@@ -986,44 +675,36 @@ function render() {
   };
 
   Profile.apply();
-  app.innerHTML = (views[State.screen] || screenHome)();
-  app.className = `screen-${State.screen}${FIGMA_SCREENS.includes(State.screen) ? ' figma' : ''}`;
+  app.innerHTML = (views[State.screen] || screenCorridor)();
+  app.className = `screen-${State.screen}${FIGMA_SCREENS.includes(State.screen) ? ' figma' : ''}${SCHOOL_SCREENS.includes(State.screen) ? ' school' : ''}`;
   Layout.update();
   applySkin();
   Stage.paint();
   loadingAfterRender();
-  if (State.screen === 'garden') ScrollGrass.mount();
-  endingAfterRender();
   afterQuizRender();
+  talkAfterRender();
   introAfterRender();
+  if (State.screen === 'home') {
+    const c = document.getElementById('corridor');
+    if (c && State.corridorX) c.scrollLeft = State.corridorX;
+    if (c) c.addEventListener('scroll', () => (State.corridorX = c.scrollLeft), { passive: true });
+  }
   if (typeof FX !== 'undefined') {
     FX.onRender();
-    // 공부를 마친 순간: 짧은 축하 (한 번만)
-    if (['result', 'rest'].includes(State.screen) && State.quiz && !State.quiz.celebrated) {
-      State.quiz.celebrated = true;
+    // 친구가 된 순간: 크게 축하 (한 번만)
+    if (State.screen === 'friendmade' && State.celebrated !== State.madeFriend + State.chapterId) {
+      State.celebrated = State.madeFriend + State.chapterId;
       FX.celebrate();
     }
   }
-  Chat.afterRender(State.screen);
-  Motion.afterRender(State.screen);
   if (LEADER_SCREENS.includes(State.screen)) Cloud.refreshLeader(render);
 }
 
 /* ============================ 이벤트 처리 ============================ */
-function currentChapter() {
-  return CHAPTER_BY_ID[State.chapterId];
-}
 
 app.addEventListener('click', async (ev) => {
   // 팝업 바깥(어두운 배경)을 누르면 닫혀요.
   if (ev.target.hasAttribute && ev.target.hasAttribute('data-backdrop')) return setSheet(null);
-
-  // 펼친 학년 · 학기 메뉴는 바깥을 누르면 닫혀요.
-  if (State.menu && !ev.target.closest('.f-menu, [data-menu]')) {
-    State.menu = null;
-    render();
-    if (!ev.target.closest('[data-grade],[data-term]')) return;
-  }
 
   // 소리 도움 모드: 글자를 누르면 다시 읽어 줘요.
   if (Profile.mode().tapRead) {
@@ -1032,11 +713,8 @@ app.addEventListener('click', async (ev) => {
   }
 
   const el = ev.target.closest(
-    '[data-skip],[data-go],[data-back],[data-subject],[data-grade],[data-unit],[data-grow],[data-water],' +
-      '[data-sub],[data-max],[data-max-locked],[data-start-max],[data-close-sheet],[data-lesson],[data-start-sub],' +
-      '[data-choice],[data-submit],[data-next],[data-hint],[data-logout],[data-game],[data-chat-with],' +
-      '[data-student],[data-add-open],[data-add-cancel],[data-remove-student],[data-range],' +
-      '[data-rep],[data-key],[data-read-problem],[data-rest-now],[data-menu],[data-term]'
+    '[data-skip],[data-go],[data-back],[data-close-sheet],[data-logout],' +
+      '[data-student],[data-add-open],[data-add-cancel],[data-remove-student],[data-range]'
   );
   if (!el) return;
 
@@ -1044,21 +722,15 @@ app.addEventListener('click', async (ev) => {
 
   // --- 이동 ---
   if (el.dataset.go) return go(el.dataset.go, { adding: false });
-  if (el.dataset.back) {
-    // 개념 보기에서 뒤로 가면 보던 소단원 팝업을 다시 열어 줘요.
-    if (State.screen === 'lesson' && el.dataset.back === 'unit') {
-      return go('unit', { sheet: { kind: 'sub', idx: State.subIdx } });
-    }
-    return go(el.dataset.back, { adding: false });
-  }
+  if (el.dataset.back) return go(el.dataset.back, { adding: false });
+  if (el.hasAttribute('data-close-sheet')) return setSheet(null);
 
   if (el.hasAttribute('data-logout')) {
+    if (!confirm('로그아웃할까요?')) return;
+    Sim.s = null;
     await safelyAsync(() => Store.logOut());
     return go('login', { grade: null, subject: null, quiz: null, studentId: null });
   }
-
-  if (el.dataset.game) return go('play', { gameId: el.dataset.game });
-  if (el.dataset.chatWith) return go('chatroom', { chatWith: el.dataset.chatWith });
 
   // --- 지도자 ---
   if (el.dataset.student) return go('lstudent', { studentId: el.dataset.student });
@@ -1082,116 +754,27 @@ app.addEventListener('click', async (ev) => {
     State.range = el.dataset.range;
     return render();
   }
-
-  // --- 과목 · 학년 · 단원 ---
-  if (el.dataset.subject) return go('garden', { subject: el.dataset.subject });
-  if (el.dataset.grade) return go('garden', { grade: Number(el.dataset.grade) });
-  if (el.dataset.term) return go('garden', { term: Number(el.dataset.term) });
-  if (el.dataset.menu) {
-    State.menu = State.menu === el.dataset.menu ? null : el.dataset.menu;
-    return render();
-  }
-  if (el.dataset.unit) return go('unit', { chapterId: el.dataset.unit });
-
-  // 물 주기(복습): 시든 식물을 원래대로
-  if (el.dataset.water) {
-    const id = el.dataset.water;
-    return startQuiz('review', Store.reviewQuestions(id), { chapterId: id, backTo: State.screen === 'garden' ? 'garden' : 'unit' });
-  }
-  // 회독: 스스로 다시 공부해서 한 단계 키우기
-  if (el.dataset.grow) {
-    const id = el.dataset.grow;
-    return startQuiz('pass', Store.passQuestions(id), { chapterId: id });
-  }
-
-  // --- 소단원 화면 팝업 ---
-  if (el.dataset.sub !== undefined) return setSheet({ kind: 'sub', idx: Number(el.dataset.sub) });
-  if (el.hasAttribute('data-max')) return setSheet({ kind: 'max' });
-  if (el.hasAttribute('data-max-locked')) return toast('빨갛게 표시된 소단원을 다시 공부하면 MAX가 열려요!', 'error');
-  if (el.hasAttribute('data-close-sheet')) return setSheet(null);
-
-  if (el.dataset.lesson !== undefined) return go('lesson', { subIdx: Number(el.dataset.lesson) });
-
-  if (el.dataset.startSub !== undefined) {
-    const ch = currentChapter();
-    const idx = Number(el.dataset.startSub);
-    const s = ch.subunits[idx];
-    if (!s || !s.questions.length) return toast('이 소단원에는 아직 문제가 없어요.', 'error');
-    return startQuiz('sub', s.questions, { chapterId: ch.id, sub: idx });
-  }
-
-  if (el.hasAttribute('data-start-max')) {
-    const ch = currentChapter();
-    return startQuiz('max', ch.maxSet, { chapterId: ch.id });
-  }
-
-  // --- 문제 상호작용 ---
-  if (el.dataset.choice !== undefined) {
-    if (State.quiz.checked) return;
-    State.quiz.selected = Number(el.dataset.choice);
-    render();
-    // 소리 도움 모드: 고른 보기를 읽어 줘요.
-    if (Profile.mode().tapRead) {
-      const t = document.querySelector(`[data-choice="${el.dataset.choice}"] .choice-text`);
-      if (t) Speech.readEl(t);
-    }
-    return;
-  }
-
-  // 표현 방식 바꾸기 (숫자 ↔ 그림 ↔ 듣기)
-  if (el.dataset.rep) {
-    State.quiz.rep = el.dataset.rep;
-    State.quiz.readKey = null;
-    Speech.stop();
-    return render();
-  }
-
-  // 숫자패드
-  if (el.dataset.key) {
-    const q = State.quiz;
-    if (!q || q.checked) return;
-    const k = el.dataset.key;
-    if (k === 'back') q.typed = q.typed.slice(0, -1);
-    else if (k === 'clear') q.typed = '';
-    else if (q.typed.length < 5) q.typed = (q.typed === '0' ? '' : q.typed) + k;
-    return render();
-  }
-
-  if (el.hasAttribute('data-read-problem')) {
-    if (!Speech.ok) return toast('이 기기에서는 읽어 주기를 쓸 수 없어요.', 'error');
-    return readProblem();
-  }
-
-  // 단시간 집중 모드: "잠깐 쉴까?" → 쉬기 (지금까지 푼 것만 텃밭에 반영해요)
-  if (el.hasAttribute('data-rest-now')) {
-    const q = State.quiz;
-    const res = safely(() => Store.finishSession({ mode: q.mode, chapterId: q.chapterId, sub: q.sub, results: q.results }));
-    if (res.ok) q.outcome = res.value;
-    return go('rest');
-  }
-
-  if (el.hasAttribute('data-hint')) {
-    State.quiz.hintOpen = true;
-    State.quiz.hintUsed = true;
-    return render();
-  }
-
-  if (el.hasAttribute('data-submit')) return State.quiz && quizParts().input === 'pencil' ? pencilSubmit() : submitAnswer();
-  if (el.hasAttribute('data-next')) return nextQuestion();
 });
 
 app.addEventListener('change', async (ev) => {
   // 로그인 · 회원가입의 학생 / 지도자 탭 (다른 화면으로 가도 고른 쪽을 기억해요)
   if (ev.target.name === 'role') State.role = ev.target.value;
 
-  // 지도자: 학생의 집중력 환기 기능 켜고 끄기
-  if (ev.target.hasAttribute('data-motion-toggle')) {
-    const on = ev.target.checked;
+  // 회원가입: 학년은 학생만 골라요.
+  if (ev.target.name === 'role') {
+    const g = document.querySelector('[data-student-only]');
+    if (g) g.hidden = ev.target.value !== 'student';
+  }
+
+  // 지도자: 학생의 학습 학년 · 학기 바꾸기
+  if (ev.target.dataset && ev.target.dataset.level) {
+    const subj = ev.target.dataset.level;
+    const [g, t] = ev.target.value.split('-').map(Number);
+    if (!g) return;
     ev.target.disabled = true;
-    const res = await safelyAsync(() => Store.setStudentMotion(State.studentId, on));
-    if (!res.ok) return render();
-    ev.target.disabled = false;
-    toast(on ? '집중력 환기 기능을 켰어요.' : '집중력 환기 기능을 껐어요.');
+    const res = await safelyAsync(() => Store.setStudentLevel(State.studentId, subj, g, t));
+    if (res.ok) toast(`${getSubject(subj).name} 학습 수준을 ${levelName({ grade: g, term: t })}로 바꿨어요.`);
+    return render();
   }
 });
 
@@ -1207,16 +790,11 @@ app.addEventListener('submit', async (ev) => {
   // 폼 안에 name="id"인 입력이 있으면 form.id가 그 입력을 가리켜서, 속성으로 읽어요.
   const formId = form.getAttribute('id');
 
-  if (formId === 'chat-form') {
-    if (Chat.send(fd.get('text'))) form.elements.text.value = '';
-    return form.elements.text.focus();
-  }
-
   if (formId === 'login-form') {
     return busy(form, async () => {
       try {
         const user = await Store.logIn(fd.get('role'), fd.get('id'), fd.get('password'), !!fd.get('keep'));
-        safely(() => Store.syncGarden());
+        if (user.role === 'student') return enterStudent();
         go(homeOf(user), { grade: user.grade });
       } catch (e) {
         const el = document.getElementById('login-error');
@@ -1236,8 +814,10 @@ app.addEventListener('submit', async (ev) => {
           password: fd.get('password'),
           password2: fd.get('password2'),
           agree: !!fd.get('agree'),
+          grade: Number(fd.get('grade')) || null,
         });
         toast(`${user.name}님, 반가워요!`);
+        if (user.role === 'student') return enterStudent();
         go(homeOf(user), { grade: user.grade });
       } catch (e) {
         const el = document.getElementById('signup-error');
@@ -1264,7 +844,6 @@ app.addEventListener('submit', async (ev) => {
 
 /* ============================== 시작 ============================== */
 (function boot() {
-  safely(() => Store.syncGarden());
   State.screen = 'splash';
   render();
   splashTimer = setTimeout(leaveSplash, 1800);

@@ -17,7 +17,7 @@ const PROFILE_DEFAULTS = {
   layout: 'auto', // 화면 배치: auto · portrait · landscape
   anim: 'normal', // 애니메이션: off · low · normal
   animTheme: 'star', // 쓸어넘기기 테마
-  mode: 'basic', // 학습 모드: basic · pencil · focus · sound
+  mode: 'basic', // 학습 모드: basic · pencil · sound
   focusMin: 6, // 단시간 집중 모드: 한 번에 공부하는 시간(분)
 };
 
@@ -28,8 +28,7 @@ const PROFILE_TTS_RATE = { slow: 0.75, normal: 0.9, fast: 1.05 };
 const MODES = {
   basic: { label: '기본 모드', icon: '👆', desc: '손가락으로 눌러서 답해요.', input: 'choice' },
   pencil: { label: '펜슬 모드', icon: '✏️', desc: '답을 손글씨로 써요. (손가락으로도 돼요)', input: 'pencil' },
-  focus: { label: '단시간 집중 모드', icon: '🎯', desc: '짧게 공부하고 쉬어요. 문제 수가 줄어요.', input: 'choice', focus: true },
-  sound: { label: '소리 도움 모드', icon: '🔊', desc: '문제와 보기를 읽어 줘요. 글자를 누르면 다시 읽어 줘요.', input: 'choice', autoRead: true, tapRead: true },
+  sound: { label: '소리 도움 모드', icon: '🔊', desc: '친구의 말과 문제를 소리로 읽어 줘요. 글자를 누르면 다시 읽어 줘요.', input: 'choice', autoRead: true, tapRead: true },
 };
 /** 단시간 집중 모드에서 한 번에 푸는 문제 수 */
 const FOCUS_COUNT = 5;
