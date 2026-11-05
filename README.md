@@ -60,7 +60,10 @@ cd "/Users/lukejoo/Desktop/2026창플" && python3 -m http.server 8777
 | `js/school.js` · `css/school.css` | 학교 화면: 복도 · 교실 · 대화 · 문제 · 친구 완성 (포스터 좌표 595×842 무대) |
 | `js/sim.js` | 시뮬레이션 엔진: 장면 줄(대사 · 선택지 · 개념 카드 · 문제) · 적응형 다음 장면 · 복습 · 레벨 테스트 · 이어하기 저장 |
 | `js/mastery.js` | 개념별 숙달도 · 신뢰도 · 다음 행동 · 문제 고르기 · 유형 비율 조정 · 복습 간격 |
-| `js/friends.js` | 친구 8명(+이름 추가) · 사회성 선택지 · 칭찬/격려 대사 · 직접 쓴 이야기(1학기 수학 5단원, 분식집) · 그 밖의 단원 이야기 만들기 |
+| `js/story.js` | 확정 시나리오: 국어 A '우리 반 비밀 우체통'(국어 1-2 가 · 도윤→하린→수아→민준) · 수학 B '여름방학까지 D-100'(수학 1-1 · 지아→태오→예린→현우→소율) · 레벨 테스트 도입 · 엔딩 4+4종. 선택은 과목마다 따로 저장(data.story)되고 다음 단원 대사 · 엔딩에 반영돼요 |
+| `js/friends.js` | 친구 9명(과목마다 따로) · 부르는 말(호격 조사: 서영아 · 지우야) · 칭찬/격려/재회 대사 · 그 밖의 단원 이야기 만들기 |
+| `js/afterschool.js` | 방과후교실: 사귄 친구들이 칸을 따라 돌아다니고, 누르면 그 단원 자율 복습(소단원마다 3문제, 최대 10문제) |
+| `api/tts.js` | 친구 목소리 읽어 주기 (Typecast). Vercel 환경 변수 `TYPECAST_API_KEY` 필요. 없으면 기기 음성으로 읽어요 |
 | `assets/school/` | 포스터에서 뽑은 도트 그림 (복도 · 교실 · 책상 · 친구 · 버튼 · 카드 · 대화 상자) |
 | `js/gen.js` · `js/bank/*.js` · `js/subunits.js` · `js/curriculum.js` | 문제 틀 · 문제은행 · 소단원(= 핵심 개념) |
 | `js/problem.js` | 문제 데이터 · 표현(숫자/그림/블록) · 입력(카드/숫자패드/손글씨) · 판정 |
@@ -70,6 +73,7 @@ cd "/Users/lukejoo/Desktop/2026창플" && python3 -m http.server 8777
 | `js/store.js` · `js/cloud.js` · `supabase/schema.sql` | 계정 · 학습 기록 · 학습 수준 · 친구 · 진행 상태 저장 (수파베이스 또는 이 기기) |
 | `js/app.js` | 화면 연결 · 로그인/가입 · 지도자 화면 |
 | `tools/check-problems.js` | 문제 전수 검사 (`node tools/check-problems.js`) |
+| `tools/check-style.js` | 문제 글 규칙 검사: 단계 · 힌트의 정답 노출, 존댓말 (`node tools/check-style.js [단원]`) |
 
 빌드 도구 없음. 데이터는 **수파베이스**(계정 · 학습 기록)에 저장합니다. `js/config.js`가 비어 있으면 예전처럼 브라우저 localStorage에만 저장합니다.
 

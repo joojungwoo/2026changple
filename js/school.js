@@ -13,6 +13,11 @@
  * ========================================================================= */
 
 const SCH = 'assets/school/';
+/** 학생 이름 (대사에 넣을 때) */
+function studentName() {
+  const u = Store.currentUser();
+  return (u && (u.nick || u.name)) || '친구';
+}
 const SUBJECT_ORDER = ['math', 'korean'];
 
 /** 화면 크기 → 무대 배율 */
@@ -56,7 +61,7 @@ const School = {
       if (f) state = f.next && f.next <= today ? 'review' : 'done';
       else if (!currentGiven && curIds.has(ch.id)) (state = 'current'), (currentGiven = true);
       else state = 'locked';
-      return { ch, state, friend: f ? friendById(f.friendId) : null, sim: Store.sim(ch.id) };
+      return { ch, state, friend: f ? friendById(chapterFriendId(ch.id, f.friendId)) : null, sim: Store.sim(ch.id) };
     });
     const allDone = cur.length > 0 && cur.every((c) => friends[c.id]);
     return { lv, seats, allDone, next: allDone ? nextLevel(subject, lv) : null };
@@ -88,7 +93,10 @@ function screenCorridor() {
     </div>`;
   }).join('');
   return `<div class="cor" id="corridor">
-      <div class="cor-strip">${doors}<div class="cor-tile end" style="--i:2"></div></div>
+      <div class="cor-strip">${doors}<div class="cor-tile" style="--i:2">
+        <button type="button" class="cor-door" data-go="after" aria-label="방과후교실로 들어가기 (사귄 친구들과 복습)"></button>
+        <button type="button" class="cor-sign after" data-go="after" tabindex="-1" aria-hidden="true"><span>방과후</span></button>
+      </div><div class="cor-tile end" style="--i:3"></div></div>
     </div>
     <div class="s-top-right">
       ${roundBtn('data-go="settings"', '<span class="s-round-txt">⚙</span>', '설정')}
@@ -114,15 +122,15 @@ function screenRoom() {
       let who = '';
       if (t.state === 'current') who = `${sImg(`${SCH}sparkle.png`, 'seat-sparkle')}${sImg(`${SCH}ghost.png`, 'seat-person ghost glow')}`;
       else if (t.state === 'locked') who = sImg(`${SCH}ghost.png`, 'seat-person ghost dim');
-      else who = `${sImg(look.sprite, 'seat-person')}${t.state === 'review' ? sImg(`${SCH}bubble.png`, 'seat-bubble') : ''}`;
+      else who = `${faceImg(t.friend, 'seat-person')}${t.state === 'review' ? sImg(`${SCH}bubble.png`, 'seat-bubble') : ''}`;
       const label =
         t.state === 'current' ? `새 친구를 만나요: ${t.ch.title}${t.sim ? ' (이어서 하기)' : ''}` :
-        t.state === 'review' ? `${t.friend.name}가 기다려요: ${t.ch.title}` :
+        t.state === 'review' ? `${josa(t.friend.name, '이', '가')} 기다려요: ${t.ch.title}` :
         t.state === 'done' ? `친구 ${t.friend.name}: ${t.ch.title}` : '아직 열리지 않은 자리';
       return `<button type="button" class="seat seat-${t.state}" style="left:${left}px;top:${top}px" data-s-seat="${t.ch.id}" aria-label="${esc(label)}">
           <span class="seat-who">${who}</span>
           ${sImg(`${SCH}${t.state === 'locked' ? 'desk-locked' : 'desk'}.png`, 'seat-desk')}
-          ${t.state === 'current' && t.sim ? '<span class="seat-tag">이어서</span>' : ''}
+          ${t.state === 'current' && t.sim ? '<span class="seat-tag"><span aria-hidden="true">▶</span> 이어서</span>' : ''}
         </button>`;
     })
     .join('');
@@ -147,8 +155,8 @@ function reunionSheet() {
   const f = friendById(sh.friendId);
   return `<div class="s-overlay" data-backdrop>
     <section class="s-sheet" role="dialog" aria-modal="true" aria-label="${esc(f.name)}의 재회 요청">
-      ${sImg(friendLook(f).sprite, 's-sheet-face')}
-      <div class="s-sheet-bubble"><b>${esc(f.name)}</b><p>${esc(sh.line)}</p></div>
+      ${faceImg(f)}
+      <div class="s-sheet-bubble"><b>${esc(f.name)}</b><p>${esc(fillLine(sh.line, { student: studentName(), friend: f }))}</p></div>
       <div class="s-sheet-btns">
         <button type="button" class="s-bar" data-s-review="${sh.chapterId}">그래, 같이 하자!</button>
         <button type="button" class="s-bar ghost" data-close-sheet>다음에</button>
@@ -161,7 +169,7 @@ function reunionSheet() {
 function portraitHtml(f, mood) {
   const look = friendLook(f);
   if (look.portrait) return sImg(mood === 'happy' && look.happy ? look.happy : look.portrait, 'talk-portrait big');
-  return sImg(look.sprite, `talk-portrait sprite mood-${mood || 'normal'}`);
+  return `<img src="${look.sprite}" class="talk-portrait sprite mood-${mood || 'normal'}" alt="" aria-hidden="true" draggable="false"${look.tint ? ` style="filter:${look.tint}"` : ''}>`;
 }
 
 function screenTalk() {
@@ -169,9 +177,12 @@ function screenTalk() {
   const n = Sim.node();
   if (!s || !n) return '';
   const ctx = Sim.ctx();
-  const f = Sim.friend();
-  const narr = n.t === 'narr';
+  // 말하는 친구: 장면에 적힌 친구(다른 친구가 끼어들 때) → 이 단원 친구
+  const f = n.who ? friendById(n.who) : Sim.friend();
   let text = fillLine(n.t === 'choice' ? n.say : n.text || '', ctx);
+  // 괄호로만 된 글은 상황 설명이에요. (선택지 질문도)
+  const narr = n.t === 'narr' || (n.t === 'choice' && /^\(.*\)$/s.test(text.trim()));
+  const showPerson = n.t !== 'card' && (!narr || n.who || (n.t === 'choice' && !/^\(.*\)$/s.test(text.trim())));
   let over = '';
   if (n.t === 'card') {
     over = `<section class="talk-card">
@@ -184,7 +195,7 @@ function screenTalk() {
   let choices = '';
   if (n.t === 'choice') {
     choices = `<div class="talk-choices" role="group" aria-label="어떻게 말할까?">
-      ${n.options.map((o, i) => `<button type="button" class="talk-choice" data-s-choice="${i}">${esc(fillLine(o.text, ctx))}</button>`).join('')}
+      ${n.options.map((o, i) => (o.if && !storyCond(o.if, ctx.flags) ? '' : `<button type="button" class="talk-choice" data-s-choice="${i}">${esc(fillLine(o.text, ctx))}</button>`)).join('')}
     </div>`;
   }
   const mood = n.mood || (n.t === 'choice' ? null : null);
@@ -192,7 +203,7 @@ function screenTalk() {
     <div class="sst-wrap"><div class="sst talk">
       ${backBtn('data-s-leave')}
       ${restBtn()}
-      ${n.t === 'card' ? '' : `<div class="talk-person ${narr ? 'away' : ''}">${portraitHtml(f, mood)}</div>`}
+      ${n.t === 'card' ? '' : `<div class="talk-person ${showPerson ? '' : 'away'}">${portraitHtml(f, mood)}</div>`}
       ${over}
       ${choices}
       <section class="talk-box ${narr ? 'narr' : ''}" ${n.t === 'choice' ? '' : 'data-s-next'}>
@@ -202,15 +213,36 @@ function screenTalk() {
       </section>
       ${n.t === 'choice' ? '' : '<button type="button" class="sr-only" data-s-next>다음</button>'}
     </div></div>
-    ${State.sheet && State.sheet.kind === 'rest' ? restSheet() : ''}`;
+    ${State.sheet && State.sheet.kind === 'rest' ? restSheet() : ''}
+    ${State.sheet && State.sheet.kind === 'welcome' ? welcomeSheet() : ''}`;
+}
+
+/** 하던 이야기로 돌아왔을 때: 나갈 때 인사와 같은 모양의 팝업 */
+function welcomeSheet() {
+  const f = Sim.friend();
+  return `<div class="s-overlay">
+    <section class="s-sheet" role="dialog" aria-modal="true" aria-label="다시 왔어요">
+      ${faceImg(f)}
+      <div class="s-sheet-bubble"><b>${esc(f.name)}</b><p>${esc(fillLine(State.sheet.line, Sim.ctx()))}</p></div>
+      <div class="s-sheet-btns">
+        <button type="button" class="s-bar" data-s-resume>응! 이어서 하자</button>
+      </div>
+    </section>
+  </div>`;
+}
+
+/** 팝업 · 자리에 쓰는 친구 작은 그림 (색을 바꾼 친구는 tint) */
+function faceImg(f, cls) {
+  const look = friendLook(f);
+  return `<img src="${look.sprite}" class="${cls || 's-sheet-face'}" alt="" aria-hidden="true" draggable="false"${look.tint ? ` style="filter:${look.tint}"` : ''}>`;
 }
 
 function restSheet() {
   const f = Sim.friend();
   return `<div class="s-overlay">
     <section class="s-sheet" role="dialog" aria-modal="true" aria-label="잠깐 쉬는 시간">
-      ${sImg(friendLook(f).sprite, 's-sheet-face')}
-      <div class="s-sheet-bubble"><b>${esc(f.name)}</b><p>잠깐 쉬자! 물 한 모금 마시고 기지개도 쭉~ 켜 봐.\n하던 곳은 내가 기억해 둘게!</p></div>
+      ${faceImg(f)}
+      <div class="s-sheet-bubble"><b>${esc(f.name)}</b><p>${esc(State.sheet.line || REST_LINES[0])}</p></div>
       <div class="s-sheet-btns">
         <button type="button" class="s-bar" data-s-resume>다 쉬었어! 이어서 하기</button>
         <button type="button" class="s-bar ghost" data-s-leave>교실로 나가기</button>
@@ -228,10 +260,14 @@ function talkAfterRender() {
   if (!Profile.mode().autoRead || State.sheet) return;
   const n = Sim.node();
   const parts = [];
+  const main = Sim.friend();
+  const who = n && n.who ? friendById(n.who) : main;
+  const narrNode = n && n.t === 'narr';
+  Speech.voice = main.voice || null;
   const card = document.querySelector('.talk-card p');
   if (card) parts.push({ text: card.textContent, el: card });
   const t = document.querySelector('.talk-text');
-  if (t) parts.push({ text: t.textContent, el: t });
+  if (t) parts.push({ text: t.textContent, el: t, voice: narrNode && !n.who ? null : who.voice || null });
   if (n && n.t === 'choice') document.querySelectorAll('.talk-choice').forEach((b, i) => parts.push({ text: `${i + 1}번, ${b.textContent}`, el: b }));
   Speech.read(parts);
 }
@@ -269,17 +305,16 @@ function startSimQuiz(q, node) {
 }
 
 function repLabel(p, id) {
-  return { numbers: p.subject === 'korean' ? '글자' : '숫자', pictures: '그림', blocks: '블록', listen: '듣기' }[id];
+  return { numbers: p.math ? '숫자' : '글자', pictures: '그림', blocks: '블록', listen: '듣기' }[id];
 }
 
-/** 표현 바꾸기 단추: 지금과 다른 표현의 이름을 보여 줘요 (숫자 화면에서는 "블록") */
+/** 표현 바꾸기 단추: 숫자(글자) · 블록 · 듣기를 문제 화면에서 바로 골라요. (설정 화면에서 옮겨 왔어요) */
 function repSwitch(p, rep) {
-  // 포스터처럼 숫자 ↔ 블록을 먼저. 그림은 작은 수의 덧셈 · 뺄셈만 (아니면 숫자와 똑같이 보여서 빼요)
-  const pic = p.math && ['+', '-'].includes(p.math.op) && Math.max(p.math.a, p.math.b) <= PICTURE_MAX;
-  const ids = ['numbers', 'blocks', 'pictures'].filter((id) => REPS[id].supports(p) && (id !== 'pictures' || pic));
+  const ids = ['numbers', 'blocks', 'listen'].filter((id) => REPS[id].supports(p));
   if (ids.length < 2) return '';
-  const nextId = ids[(ids.indexOf(rep) + 1) % ids.length];
-  return `<button type="button" class="s-chip" data-s-rep="${nextId}">${repLabel(p, nextId)}</button>`;
+  return `<div class="q-reps" role="radiogroup" aria-label="문제 보는 방법">${ids
+    .map((id) => `<button type="button" role="radio" aria-checked="${id === rep}" class="s-chip ${id === rep ? 'on' : ''}" data-s-rep="${id}">${repLabel(p, id)}</button>`)
+    .join('')}</div>`;
 }
 
 function quizCardsHtml(parts) {
@@ -289,7 +324,8 @@ function quizCardsHtml(parts) {
   return `<div class="ans ${long ? 'long' : ''} n${item.choices.length}">
     ${item.choices
       .map((c, i) => {
-        let cls = `ans-card c${i % CARD_COLORS}`;
+        const shape = shapeKind(c);
+        let cls = `ans-card ${shape ? `shape shape-${shape}` : `c${i % CARD_COLORS}`}`;
         let mark = '';
         if (q.checked) {
           if (i === item.answer) (cls += ' right'), (mark = '<span class="ans-mark">⭐</span>');
@@ -300,7 +336,7 @@ function quizCardsHtml(parts) {
         const off = q.checked || tried.has(i) || (q.elim && q.elim.includes(i));
         const len = [...c].length;
         return `<button type="button" class="${cls}" data-s-pick="${i}" ${off ? 'disabled' : ''}>
-          <span class="ans-text ${len > 12 ? 'xs' : len > 4 ? 'sm' : ''}" data-read>${nl(c)}</span>${mark}
+          <span class="ans-text ${len > 12 ? 'xs' : len > 4 ? 'sm' : ''}" data-read>${shapeColorize(nl(c))}</span>${mark}
         </button>`;
       })
       .join('')}
@@ -320,7 +356,7 @@ function screenQuiz() {
   const showSteps = q.hintLv >= 2 || q.checked;
   const body = REPS[rep === 'listen' ? 'numbers' : rep].render(p, { checked: showSteps });
   let bubble = '';
-  if (q.say) bubble = `<div class="q-say ${q.say.kind || ''}" role="status"><b>${esc(f.name)}</b><span data-read>${nl(q.say.text)}</span></div>`;
+  if (q.say) bubble = `<div class="q-say ${q.say.kind || ''}" role="status"><b>${esc(f.name)}</b><span data-read>${shapeColorize(nl(q.say.text))}</span></div>`;
 
   let action;
   if (q.checked && !q.correct && !test) action = `<button type="button" class="s-submit" data-s-after>알겠어!</button>`;
@@ -341,7 +377,7 @@ function screenQuiz() {
       <section class="q-card rep-${rep}">
         <button type="button" class="s-speaker" data-read-problem aria-label="문제 읽어 주기">${sImg(`${SCH}btn-speaker.png`)}</button>
         <div class="q-body quiz-problem">${body}</div>
-        ${sImg(friendLook(f).sprite, 'q-friend')}
+        ${faceImg(f, 'q-friend')}
         ${bubble}
       </section>
       <div class="q-tools">
@@ -353,25 +389,59 @@ function screenQuiz() {
       </div>
       ${action}
     </div></div>
-    ${State.sheet && State.sheet.kind === 'rest' ? restSheet() : ''}`;
+    ${State.sheet && State.sheet.kind === 'rest' ? restSheet() : ''}
+    ${State.sheet && State.sheet.kind === 'welcome' ? welcomeSheet() : ''}`;
 }
 
-/** 힌트: 1단계 = 짧은 힌트, 2단계 = 풀이 단계 보이기(없으면 오답 하나 지우기) */
+/** 쉬는 시간 인사 */
+const REST_LINES = [
+  '잠깐 쉬자! 물 한 모금 마시고 기지개도 쭉~ 켜 봐.\n하던 곳은 내가 기억해 둘게!',
+  '쉬는 시간이다! 눈 감고 숨 크게 한 번 쉬어 봐. 후~\n다녀오면 여기서 기다릴게!',
+  '우리 열심히 했다! 잠깐 쉬었다 하자.\n어디까지 했는지 내가 꼭 기억할게.',
+  '손목 빙글빙글, 어깨 으쓱으쓱~ 몸 풀고 와!\n돌아오면 바로 이어서 하자!',
+];
+
+/**
+ * 힌트: 1단계 = 친구가 말해 주는 짧은 힌트
+ *       2단계 = 풀이 단계가 있으면 "위에 적어 뒀어", 없으면 친구가 헷갈리는 척하며 오답 하나를 지워요.
+ */
 function useHint() {
   const q = State.quiz;
   const item = q.questions[0];
   if (q.checked || q.hintLv >= 2) return;
   q.hintLv += 1;
   q.hintUsed = true;
-  if (q.hintLv === 1) q.say = { kind: 'hint', text: `💡 ${item.hint || '천천히 다시 읽어 보자!'}` };
-  else if (item.steps) q.say = { kind: 'hint', text: '💡 카드에 풀이 순서를 적어 뒀어. 하나씩 따라가 봐!' };
+  if (q.hintLv === 1) q.say = { kind: 'hint', text: `💡 ${item.hint || '천천히 다시 읽어 보자! 무엇을 묻는지 손가락으로 짚어 봐.'}` };
+  else if (item.steps) q.say = { kind: 'hint', text: `💡 ${pickOne(STEP_HINT_LINES)}` };
   else {
     const wrong = item.choices.map((_, i) => i).filter((i) => i !== item.answer && !q.tries.some((t) => t.index === i) && !(q.elim || []).includes(i));
-    if (wrong.length > 1) q.elim = [...(q.elim || []), wrong[0]];
+    if (wrong.length > 1) {
+      const out = wrong[Math.floor(Math.random() * wrong.length)];
+      q.elim = [...(q.elim || []), out];
+      q.say = { kind: 'hint', text: `💡 ${elimLine(item, out)}` };
+    } else q.say = { kind: 'hint', text: '💡 이제 두 개 중에 하나야! 문제를 한 번 더 읽고 골라 봐.' };
     if (q.selected !== null && (q.elim || []).includes(q.selected)) q.selected = null;
-    q.say = { kind: 'hint', text: '💡 이건 답이 아니야! 남은 것 중에서 골라 봐.' };
   }
   render();
+}
+
+/** 2단계 힌트: 풀이 단계가 있을 때 */
+const STEP_HINT_LINES = ['위에 내가 풀이 순서를 적어 뒀어! 하나씩 따라가 봐.', '문제 아래에 순서를 적어 놨어. ①부터 차례대로 해 보자!', '위에 적어 둔 순서대로 하나씩 해 볼까? 같이 따라가 보자!'];
+
+/** 2단계 힌트: 친구가 직접 해 보는 척하며 오답 하나를 지워요. (근거를 말해 줘요) */
+function elimLine(item, i) {
+  const c = String(item.choices[i]).replace(/\n/g, ' ');
+  const bare = c.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, '');
+  const word = /^\d+$/.test(bare) ? bare + genJosa(Number(bare), '은', '는') : josa(bare, '은', '는');
+  const subj = item.subject || ((item.chapterId || '').startsWith('m') ? 'math' : 'korean');
+  const num = /^\d+\s*\S{0,2}$/.test(c);
+  const shape = shapeKind(c);
+  const lines = shape
+    ? [`음… 내가 굴려 보고 쌓아 봤는데 ${word} 아닌 것 같아. 그럼 뭘까?`, `${word} 아닌 것 같아. 평평한 곳이랑 둥근 곳을 다시 봤거든… 남은 것 중에 뭘까?`]
+    : num && subj === 'math'
+      ? [`내가 하나씩 세어 봤는데 ${word} 아닌 것 같아… 그럼 몇일까?`, `음… 내가 해 봤는데 ${word} 아니더라. 남은 것 중에서 다시 해 보자!`, `${word} 아닌 것 같아. 손가락으로 다시 짚어 봤거든… 그럼 뭘까?`]
+      : [`음… 내가 다시 읽어 봤는데 "${c}"${josa(c, '은', '는').slice(-1)} 아닌 것 같아. 남은 것 중에 뭘까?`, `"${c}"${josa(c, '은', '는').slice(-1)} 답이 아닌 것 같아. 문제를 다시 읽고 남은 것 중에서 골라 보자!`];
+  return pickOne(lines);
 }
 
 /** 오답 유형 (같은 실수가 되풀이되는지 보려고): 수로 답하는 문제는 차이, 아니면 고른 보기 */
@@ -426,11 +496,12 @@ function submitAnswer() {
     input,
     ms: Date.now() - q.shownAt,
   };
-  if (test) q.say = { kind: 'ok', text: pickOne(['좋아! 다음 문제!', '잘하고 있어!', '천천히 해도 돼. 다음 거!']) };
-  else if (correct) q.say = { kind: 'ok', text: '맞았어! 🎉' };
+  if (test) q.say = { kind: 'ok', text: pickOne(TEST_NEXT_LINES) };
+  else if (correct) q.say = { kind: 'ok', text: pickOne(RIGHT_LINES) };
   else q.say = { kind: 'why', text: `정답은 "${item.choices[item.answer]}"야. 같이 보자!` };
   render();
-  if (correct || test) setTimeout(() => State.quiz === q && Sim.problemDone(q.result), test ? 650 : 900);
+  // 레벨 테스트는 친구 말을 읽을 시간을 넉넉히 줘요.
+  if (correct || test) setTimeout(() => State.quiz === q && Sim.problemDone(q.result), test ? 1900 : 1300);
 }
 
 /* ============================== 친구 완성 ============================== */
@@ -442,9 +513,9 @@ function screenFriendMade() {
     <div class="sst-wrap"><div class="sst made">
       <div class="made-rays" aria-hidden="true"></div>
       ${sImg(`${SCH}sparkle.png`, 'made-sparkle')}
-      ${sImg(look.portrait ? look.happy || look.portrait : look.sprite, `made-face ${look.portrait ? 'big' : 'sprite'}`)}
+      ${look.portrait ? sImg(look.happy || look.portrait, 'made-face big') : faceImg(f, 'made-face sprite')}
       <h1 class="made-title"><span>${esc(josa(f.name, '과', '와'))}</span><span>친구가 됐어!</span></h1>
-      <p class="made-sub">${esc(f.name)}는 이제 교실 자리에 앉아 있어요.${ch ? `<br><small>${esc(ch.title)}</small>` : ''}</p>
+      <p class="made-sub">${esc(josa(f.name, '은', '는'))} 이제 교실 자리에 앉아 있어요. 방과후교실에서도 만날 수 있어요!${ch ? `<br><small>${esc(ch.title)}</small>` : ''}</p>
       <button type="button" class="s-submit made-btn" data-go="room">교실로 가기</button>
     </div></div>`;
 }
@@ -479,7 +550,7 @@ function screenFriendMade() {
       const left = (i % 2 === 0 ? 74 : 300) - 20;
       const top = ROOM_TOP + i * ROOM_STEP - 120;
       if (t.state === 'done') {
-        State.roomSay = { left, top, text: pickOne([`나 ${t.friend.name}! 다음에 또 놀자~`, '오늘도 반가워!', '우리 또 만날 거지?']) };
+        State.roomSay = { left, top, text: fillLine(pickOne([`나 ${t.friend.name}! 다음에 또 놀자~`, ...ROOM_TAP_LINES]), { student: studentName(), friend: t.friend }) };
       } else {
         State.roomSay = { left, top, text: '앞자리 친구를 먼저 만나 볼까?' };
         el.classList.add('shake');
@@ -518,7 +589,7 @@ function screenFriendMade() {
     }
     if (el.hasAttribute('data-s-rest')) {
       Speech.stop();
-      return setSheet({ kind: 'rest' });
+      return setSheet({ kind: 'rest', line: pickOne(REST_LINES) });
     }
     if (el.hasAttribute('data-s-resume')) return setSheet(null);
 
@@ -537,6 +608,7 @@ function screenFriendMade() {
     }
     if (d.sRep) {
       q.rep = d.sRep;
+      State.repPref = d.sRep;
       q.readKey = null;
       Speech.stop();
       return render();

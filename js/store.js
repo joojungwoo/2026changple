@@ -36,7 +36,7 @@ const STAGES = ['empty', 'seed', 'sprout', 'tree', 'fruit'];
 const PASS_INTERVALS = [1, 7];
 
 /** 회독 퀴즈에서 소단원마다 뽑는 문제 수 */
-const PASS_PER_SUB = 7;
+const PASS_PER_SUB = 3; // 소단원 3개 × 3 = 9문제 (회독 한 번에 10문제를 넘지 않게)
 
 /** MAX 통과 기준 (정답률) */
 const MAX_PASS_RATE = 0.8;
@@ -874,11 +874,37 @@ const Store = {
     const db = this._read();
     const data = this._myData(db);
     data.cast = data.cast || {};
-    if (!data.cast[chapterId]) {
-      data.cast[chapterId] = nextFriendId(Object.values(data.cast));
+    const want = STORY_CAST[chapterId];
+    if (!data.cast[chapterId] || (want && data.cast[chapterId] !== want)) {
+      data.cast[chapterId] = nextFriendId(chapterId, Object.values(data.cast));
       this._write(db);
     }
     return data.cast[chapterId];
+  },
+
+  /** 이야기 관계 상태 (과목마다 따로): 선택으로 생긴 표시(flags) · 엔딩 */
+  story(subject) {
+    const d = this.getData();
+    return (d.story && d.story[subject]) || { flags: {} };
+  },
+
+  setStoryFlags(subject, patch) {
+    const db = this._read();
+    if (!db.session) return;
+    const data = this._myData(db);
+    data.story = data.story || {};
+    const st = data.story[subject] || { flags: {} };
+    data.story[subject] = { ...st, flags: { ...(st.flags || {}), ...patch } };
+    this._write(db);
+  },
+
+  setStoryEnding(subject, endingId) {
+    const db = this._read();
+    if (!db.session) return;
+    const data = this._myData(db);
+    data.story = data.story || {};
+    data.story[subject] = { ...(data.story[subject] || { flags: {} }), ending: endingId, endedAt: todayStr() };
+    this._write(db);
   },
 
   /**
