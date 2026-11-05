@@ -221,3 +221,66 @@ body[data-anim='off'] .school *, body[data-anim='off'] .school *::before { anima
 .conf { display: inline-block; padding: 2px 6px; border-radius: 6px; font-size: 12px; background: #eee; }
 .conf-HIGH { background: #dff3e4; color: #2e7d46; } .conf-MEDIUM { background: #fff1cf; color: #96690f; } .conf-LOW { background: #fde3dd; color: #a8442f; }
 .lv-select { font: inherit; font-size: 15px; padding: 6px 8px; border: 2px solid #d9c89a; border-radius: 8px; background: #fff; max-width: 9.5em; }
+
+/* =========================== 2차 수정 =========================== */
+/* 대화: 친구 몸이 대화 상자 위에 붕 떠 보이지 않게 아래로 내려 상자 뒤에 걸치게 해요. */
+.talk-portrait.big { top: 92px; }
+.talk-portrait.sprite { top: 84px; }
+
+/* 교실: 반짝임은 밝게 ↔ 흐리게 두 단계만 (필터를 계속 다시 그리지 않아 버벅이지 않아요) */
+.seat-person.ghost.glow { filter: drop-shadow(0 0 6px #fff3a0); animation: s-blink2 1.2s steps(1, end) infinite; will-change: opacity; }
+.seat-sparkle { animation: s-blink2 1.2s steps(1, end) infinite; will-change: opacity; }
+.made-sparkle { animation: s-blink2 1s steps(1, end) infinite; }
+@keyframes s-blink2 { 0% { opacity: 1; } 50% { opacity: .45; } }
+
+/* 교실: "이어서" 표시 — 머리 위 말풍선처럼, 눈에 잘 띄게 */
+.seat-tag { left: 50%; top: -112px; transform: translateX(-50%); padding: 6px 14px 7px; border: 3px solid #2b2b2b; border-radius: 14px; background: #fff3b0; font-size: 17px; color: #3b2f2f; white-space: nowrap; box-shadow: 0 3px 0 rgba(0, 0, 0, .25); animation: s-bob 1.2s ease-in-out infinite; }
+.seat-tag::after { content: ''; position: absolute; left: 50%; bottom: -12px; margin-left: -8px; border-top: 10px solid #2b2b2b; border-left: 8px solid transparent; border-right: 8px solid transparent; }
+.seat-tag span { color: #d6413a; font-size: 13px; }
+
+/* 개념 카드: 설명이 길어져도 다 보이게 */
+.talk-card { max-height: 400px; overflow-y: auto; }
+.talk-card p { font-size: 19px; line-height: 1.6; text-align: left; display: inline-block; }
+
+/* 문제: 숫자 · 블록 · 듣기 단추 */
+.q-reps { display: flex; gap: 8px; padding-right: 8px; margin-right: 6px; border-right: 3px dotted var(--s-line); }
+.q-reps .s-chip.on { filter: none; background-image: none; background: #fff3b0; border: 3px solid #2b2b2b; border-radius: 10px; color: #3b2f2f; }
+
+/* 모양 이름 색: 상자 모양 빨강 · 공 모양 노랑 · 둥근 기둥 모양 파랑 (보기 · 힌트 · 단계 모두 같아요) */
+.shape-word { padding: 0 4px; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+.shape-word.shape-box { color: #b3261e; background: #ffe1dc; }
+.shape-word.shape-ball { color: #8a5a00; background: #fff1a8; }
+.shape-word.shape-cyl { color: #1d4f9c; background: #dbe9ff; }
+.ans-card.shape { border: 5px solid #2b2b2b; border-radius: 12px; border-image: none; }
+.ans-card.shape-box { background: #ffd2cb; }
+.ans-card.shape-ball { background: #fff0a0; }
+.ans-card.shape-cyl { background: #cfe2ff; }
+.ans-card.shape .shape-word { background: none; padding: 0; }
+
+/* 문제 글 아래 낱말 풀이 */
+.word-gloss { margin: 8px 0 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.word-gloss span { font-family: var(--s-text); font-size: 13px; color: #5b6b80; }
+
+/* =========================== 방과후교실 =========================== */
+.af-wrap { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: 84px 16px 32px; background: #ece3d3; }
+.af-head { text-align: center; margin-bottom: 14px; }
+.af-head h1 { margin: 0; font-family: var(--s-bold); font-weight: 400; font-size: 32px; color: #fff; -webkit-text-stroke: 6px #8a5a2b; paint-order: stroke fill; }
+.af-head p { margin: 6px 0 0; font-family: var(--s-text); font-size: 16px; color: #5b4630; }
+.af-floor { position: relative; flex: 0 0 auto; zoom: min(1, calc((100vw - 32px) / 448px)); background: url('../assets/school/room-floor.png') 0 0 / 448px 45px repeat; background-color: #d9a85e; border: 6px solid #6b4a20; border-radius: 6px; image-rendering: pixelated; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .25); }
+.af-floor::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(0, 0, 0, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, .06) 1px, transparent 1px); background-size: 64px 64px; pointer-events: none; }
+.af-kid { position: absolute; width: 64px; height: 64px; transition: left .9s steps(4, end), top .9s steps(4, end); z-index: 2; }
+.af-sprite { position: absolute; left: -8px; bottom: 10px; width: 80px; }
+.af-kid[data-dir='left'] .af-sprite { transform: scaleX(-1); }
+.af-name { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); padding: 1px 7px; background: rgba(255, 255, 255, .9); border: 2px solid #2b2b2b; border-radius: 8px; font-family: var(--s-text); font-size: 12px; color: #2b2b2b; white-space: nowrap; }
+.af-kid:active .af-sprite { transform: translateY(-4px); }
+.af-kid:focus-visible { outline: 3px dashed #6b4a20; outline-offset: 2px; }
+.af-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 24px; font-family: var(--s-text); color: #3b2f2f; }
+.af-empty b { font-family: var(--s-bold); font-size: 22px; }
+.af-empty p { white-space: pre-line; font-size: 16px; line-height: 1.6; }
+.af-unit { display: block; margin-top: 6px; font-family: var(--s-text); font-size: 13px; color: var(--s-btn-ink); }
+.cor-sign.after span { color: #8a3b2b; }
+/* 개념 카드: 길어진 설명이 대화 상자와 겹치지 않게 (넘치면 카드 안에서 스크롤) */
+.talk-card { top: 96px; box-sizing: border-box; max-height: 424px; padding: 10px 22px 14px; }
+.talk-card-ico { font-size: 38px; }
+.talk-card h2 { margin: 2px 0 8px; font-size: 25px; }
+.talk-card p { font-size: 17px; line-height: 1.55; }

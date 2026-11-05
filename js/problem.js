@@ -113,22 +113,22 @@ function whyWrong(p, res) {
   const q = p.q;
   const idx = responseChoice(p, res);
   if (q.why && idx >= 0 && q.why[idx]) return q.why[idx];
-  const fallback = q.hint ? `다시 생각해 볼까요? ${q.hint}` : '다른 답을 골라 볼까요? 천천히 다시 읽어 봐요.';
+  const fallback = q.hint ? `다시 생각해 볼까? ${q.hint}` : '다른 답을 골라 볼까? 천천히 다시 읽어 봐.';
   if (p.answer.kind !== 'number') return fallback;
   const c = p.answer.value;
   const w = res.kind === 'number' ? Number(res.value) : (problemNumber(q.choices[res.index]) || {}).value;
   if (w === undefined || Number.isNaN(w)) return fallback;
   const m = p.math;
   if (c >= 10 && w >= 10 && String(c).length === 2 && String(w) === String(c).split('').reverse().join('')) {
-    return '십의 자리와 일의 자리 숫자가 바뀌었어요. 몇십인지 먼저 볼까요?';
+    return '십의 자리와 일의 자리 숫자가 바뀌었어. 몇십인지 먼저 볼까?';
   }
-  if (m && m.op === '+' && w === Math.abs(m.a - m.b)) return '빼기를 했어요. "모두", "더"는 더하라는 말이에요.';
-  if (m && m.op === '-' && w === m.a + m.b) return '더하기를 했어요. "남은", "더 많은"은 빼라는 말이에요.';
-  if (m && (m.op === '+' || m.op === '-') && Math.abs(w - c) === 10) return '10만큼 차이 나요. 받아올림이나 받아내림을 했는지 살펴봐요.';
+  if (m && m.op === '+' && w === Math.abs(m.a - m.b)) return '앗, 빼기를 했네. "모두", "더"는 더하라는 말이야.';
+  if (m && m.op === '-' && w === m.a + m.b) return '앗, 더하기를 했네. "남은", "더 많은"은 빼라는 말이야.';
+  if (m && (m.op === '+' || m.op === '-') && Math.abs(w - c) === 10) return '10만큼 차이 나. 받아올림이나 받아내림을 했는지 같이 보자.';
   const inText = String(q.text || '').match(/\d+/g) || [];
-  if (inText.map(Number).includes(w)) return '문제에 있는 수를 그대로 골랐어요. 무엇을 묻는지 다시 읽어 볼까요?';
-  if (w === c - 1) return '하나 모자라요. 하나씩 짚으면서 다시 세어 볼까요?';
-  if (w === c + 1) return '하나 더 많아요. 같은 것을 두 번 센 건 아닌지 살펴봐요.';
+  if (inText.map(Number).includes(w)) return '문제에 있는 수를 그대로 골랐네. 무엇을 묻는지 다시 읽어 볼까?';
+  if (w === c - 1) return '하나 모자라. 하나씩 짚으면서 다시 세어 볼까?';
+  if (w === c + 1) return '하나 더 많아. 같은 걸 두 번 센 건 아닌지 같이 보자.';
   return fallback;
 }
 
@@ -196,6 +196,38 @@ function repVisualHtml(q) {
   return q.visual ? `<div class="visual">${nl(q.visual)}</div>` : '';
 }
 
+/** 모양 이름 → 고정 색 (상자 모양 빨강 · 공 모양 노랑 · 둥근 기둥 모양 파랑). 보기 · 힌트 · 단계가 모두 같은 색이에요. */
+const SHAPE_COLORS = [
+  ['둥근 기둥 모양', 'cyl'],
+  ['상자 모양', 'box'],
+  ['공 모양', 'ball'],
+];
+function shapeKind(text) {
+  const t = String(text || '');
+  const hit = SHAPE_COLORS.filter(([name]) => t.includes(name));
+  return hit.length === 1 ? hit[0][1] : null;
+}
+/** 글 속 모양 이름에 색을 입혀요. (이미 HTML로 바꾼 글에 써요) */
+function shapeColorize(html) {
+  return String(html).replace(/둥근 기둥 모양|상자 모양|공 모양/g, (m) => `<span class="shape-word shape-${SHAPE_COLORS.find(([n]) => n === m)[1]}">${m}</span>`);
+}
+
+
+/** 1학년이 어려워하는 낱말: 문제 글에 나오면 아래에 작은 풀이를 붙여요. */
+const WORD_GLOSS = [
+  ['까닭', '까닭은 그렇게 생각한 이유와 같은 말이야.'],
+  ['실감', '실감 난다는 건 진짜처럼 느껴진다는 뜻이야.'],
+  ['글쓴이', '글쓴이는 글을 쓴 사람이야.'],
+  ['인물', '인물은 이야기에 나오는 사람이나 동물이야.'],
+  ['흉내 내는 말', '흉내 내는 말은 소리나 모양을 따라 한 말이야. (멍멍, 깡충깡충)'],
+  ['낱말', '낱말은 뜻이 있는 말 한 덩어리야. (사과, 학교)'],
+];
+function glossHtml(text) {
+  const t = String(text || '');
+  const hits = WORD_GLOSS.filter(([w]) => t.includes(w)).slice(0, 2);
+  return hits.length ? `<p class="word-gloss">${hits.map(([, g]) => `<span>📌 ${esc(g)}</span>`).join('')}</p>` : '';
+}
+
 /** 단계 글에 정답이 들어 있는지 ("③ 답은 75" 같은 단계는 답을 확인한 뒤에 보여 줘요) */
 function stepGivesAnswer(p, step) {
   if (p.answer.kind === 'number') return new RegExp(`(^|[^0-9])${p.answer.value}([^0-9]|$)`).test(step);
@@ -206,11 +238,11 @@ function stepGivesAnswer(p, step) {
 function repTextHtml(p, ctx) {
   const q = p.q;
   const shown = (s) => (ctx && ctx.checked) || !stepGivesAnswer(p, s);
-  return `<p class="question-text" data-read>${nl(q.text)}</p>
+  return `<p class="question-text" data-read>${nl(q.text)}</p>${glossHtml(q.text)}
     ${
       q.steps
         ? `<ol class="steps">${q.steps
-            .map((s) => (shown(s) ? `<li data-read>${esc(s)}</li>` : `<li class="step-hidden">${esc(s.match(/^[①②③④⑤]/) ? s[0] : '')} 이 단계는 직접 해 봐요 ✏️</li>`))
+            .map((s) => (shown(s) ? `<li data-read>${shapeColorize(esc(s))}</li>` : `<li class="step-hidden">${esc(s.match(/^[①②③④⑤]/) ? s[0] : '')} 이 단계는 직접 해 봐 ✏️</li>`))
             .join('')}</ol>`
         : ''
     }`;

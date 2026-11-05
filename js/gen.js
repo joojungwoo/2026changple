@@ -60,6 +60,13 @@ function genJosa(n, withFinal, without) {
   return [0, 1, 3, 6, 7, 8].includes(Math.abs(n) % 10) ? withFinal : without;
 }
 
+/** 낱말 뒤에 붙는 조사: 받침이 있으면 withFinal ("둘"이라고 · "셋"이라고 · "넷"이라고) */
+function genJw(word, withFinal, without) {
+  const code = String(word).trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return without;
+  return code % 28 ? withFinal : without;
+}
+
 const GEN_NATIVE = ['영', '하나', '둘', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉', '열'];
 const GEN_SINO = ['영', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구', '십'];
 const GEN_ORDER = ['', '첫째', '둘째', '셋째', '넷째', '다섯째'];
@@ -79,22 +86,72 @@ const tens = (e, n) => {
   return lines.join('\n');
 };
 
+/** 1~19를 세는 말: 하나 … 열 … 열아홉 */
+const genCountWord = (n) => (n <= 10 ? GEN_NATIVE[n] : `열${GEN_NATIVE[n - 10]}`);
+
+/**
+ * 이어 세기에서 힌트로 보여 줄 수: start 다음부터 한두 개만.
+ * more개를 이어 세면 마지막 수(start+more)가 답이라서, 많아야 more-1개까지만 보여 줘요. (답은 말하지 않아요)
+ */
+const genShown = (start, more, dir) => Array.from({ length: Math.min(2, more - 1) }, (_, i) => start + (dir || 1) * (i + 1));
+
+/**
+ * 그림을 짚으며 이어 세기 힌트 (덧셈)
+ *  e: 짚을 그림 · start: 이미 센 수 · more: 더 셀 개수 · what: 더 셀 것의 이름
+ */
+function genCountOnHint(e, start, more, what) {
+  const shown = genShown(start, more);
+  if (!shown.length) return `이제 ${what}을(를) 짚으며 ${genCountWord(start)} 바로 다음 수를 말해 봐.\n그 수가 답이야.`;
+  return [`이제 ${what}을(를) 하나씩 짚으며 이어 세어 봐.`, ...shown.map((v) => `${e} ${genCountWord(v)}~`), '…', '마지막에 말한 수가 답이야.'].join('\n');
+}
+
+/** 손가락으로 펴며(+) · 접으며(−) 세기 힌트 */
+function genFingerHint(start, more, dir) {
+  const verb = dir > 0 ? '더 펴면' : '접으면';
+  const shown = genShown(start, more, dir);
+  if (!shown.length) return `손가락 한 개를 ${verb} 몇이 될까?`;
+  return [...shown.map((v, i) => `${i ? '또 한 개' : '한 개'} ${verb} → ${v}`), '…', dir > 0 ? '다 펴고 나서 마지막에 말한 수가 답이야.' : '다 접고 나서 펴져 있는 손가락을 세어 봐.'].join('\n');
+}
+
+/** 수와 읽는 말 짝 (앞뒤 수만 보여 주고, 물어본 수는 ❓로 비워 둬요) */
+function genReadTable(n, lo, hi, read, label = (x) => x) {
+  const lines = [];
+  if (n - 1 >= lo) lines.push(`${label(n - 1)} → ${read(n - 1)}`);
+  lines.push(`${label(n)} → ❓`);
+  if (n + 1 <= hi) lines.push(`${label(n + 1)} → ${read(n + 1)}`);
+  return lines.join('\n');
+}
+
 /* ---------------------------- 2단원 재료 ---------------------------- */
+/** 모양을 가려내는 기준 → 그게 무슨 뜻인지 (모양 이름은 아이가 직접 골라요) */
+const GEN_SHAPE_HINT = [
+  '이렇게 살펴봐!',
+  '평평한 부분만 있고 뾰족한 곳이 있어? → 잘 쌓이지만 굴러가지 않아. 상자처럼 생겼어.',
+  '평평한 부분도, 둥근 부분도 있어? → 눕히면 굴러가고 세우면 쌓여. 기둥처럼 생겼어.',
+  '평평한 부분 없이 모두 둥글어? → 어느 쪽으로든 데굴데굴 굴러가. 공처럼 생겼어.',
+].join('\n');
+
 const GEN_SHAPES = [
   {
     name: '상자 모양',
-    things: ['📦 택배 상자', '🎁 선물 상자', '🎲 주사위', '🧱 벽돌', '📕 두꺼운 책', '🧊 네모난 얼음'],
-    says: ['뾰족한 부분이 있고 잘 쌓을 수 있어요.', '평평한 부분만 있어서 굴러가지 않아요.'],
+    things: ['📦 택배 상자', '🎁 선물 상자', '🎲 주사위', '🧱 벽돌', '🧃 주스 팩', '🧊 네모난 얼음'],
+    says: ['뾰족한 곳이 있고, 평평한 부분만 있어.', '잘 쌓이지만, 굴러가지는 않아.'],
+    look: '평평한 부분만 있고 뾰족한 곳이 있는 것',
+    like: '평평한 부분이 있어서 잘 쌓여. 대신 공처럼 굴러가지는 않아.',
   },
   {
     name: '둥근 기둥 모양',
-    things: ['🥫 통조림 캔', '🥁 북', '🔋 건전지', '🕯️ 양초', '🧻 두루마리 휴지', '🥤 음료수 컵'],
-    says: ['눕히면 굴러가고, 세우면 쌓을 수 있어요.', '평평한 부분도 있고 둥근 부분도 있어요.'],
+    things: ['🥫 통조림 캔', '🥁 북', '🔋 건전지', '🕯️ 양초', '🧻 두루마리 휴지', '🪵 통나무'],
+    says: ['눕히면 굴러가고, 세우면 쌓을 수 있어.', '평평한 부분도 있고, 둥근 부분도 있어.'],
+    look: '위아래는 평평하고 옆은 둥근 것',
+    like: '눕히면 데굴데굴 굴러가고, 세우면 차곡차곡 쌓을 수 있어.',
   },
   {
     name: '공 모양',
     things: ['⚽ 축구공', '🏀 농구공', '🎾 테니스공', '🏐 배구공', '🔮 구슬', '🍊 귤'],
-    says: ['어느 쪽으로 굴려도 잘 굴러가요.', '평평한 부분이 없어서 쌓을 수 없어요.'],
+    says: ['어느 쪽으로 굴려도 잘 굴러가.', '평평한 부분이 없어서 쌓을 수 없어.'],
+    look: '평평한 부분 없이 모두 둥근 것',
+    like: '어디나 둥글어서 어느 쪽으로든 굴러가. 대신 쌓기는 어려워.',
   },
 ];
 
@@ -110,8 +167,8 @@ function genShapeTemplates(k) {
         type: 'visual', level: '하', visual: ok.split(' ')[0],
         text: `${ok.slice(ok.indexOf(' ') + 1)}은(는) 어떤 모양인가요?`,
         ...genChoices(r, me.name, names),
-        hint: '평평한 부분과 둥근 부분이 있는지 살펴보세요.',
-        solution: `${ok}은(는) ${me.name}이에요. ${me.says[0]}`,
+        hint: GEN_SHAPE_HINT,
+        solution: `${ok}은(는) ${me.name}(이)야. ${me.name}은(는) ${me.like}`,
       };
     },
     (r) => {
@@ -121,8 +178,8 @@ function genShapeTemplates(k) {
         type: 'visual', level: '하', visual: [ok, ...wrongs].map((t) => t.split(' ')[0]).sort().join('   '),
         text: `${me.name}인 물건은 무엇인가요?`,
         ...genChoices(r, ok, wrongs),
-        hint: me.says[0],
-        solution: `${ok}이(가) ${me.name}이에요.`,
+        hint: `${me.name}은(는) ${me.look}이야.\n${me.says[1]}\n아래 답 중에서 이런 물건을 찾아봐.`,
+        solution: `${ok}이(가) ${me.name}(이)야. ${me.like}`,
       };
     },
     (r) => {
@@ -131,8 +188,8 @@ function genShapeTemplates(k) {
         type: 'think', level: '중', visual: `💬 "${say}"`,
         text: '친구가 설명하는 모양은 무엇인가요?',
         ...genChoices(r, me.name, names),
-        hint: '세 가지 모양을 하나씩 굴려 보고 쌓아 본다고 생각해 보세요.',
-        solution: `${me.name}은(는) ${say}`,
+        hint: GEN_SHAPE_HINT,
+        solution: `친구 말처럼 ${say} 그래서 ${me.name}(이)야.`,
       };
     },
     (r) => {
@@ -141,10 +198,10 @@ function genShapeTemplates(k) {
       return {
         type: 'step', level: '중', visual: r.shuffle([...two, odd]).map((t) => t.split(' ')[0]).join('   '),
         text: '모양이 다른 물건 하나는 무엇인가요?',
-        steps: ['① 물건마다 어떤 모양인지 생각해요.', '② 같은 모양 둘을 찾아요.', '③ 남은 하나를 골라요.'],
+        steps: ['① 물건마다 평평한 부분, 둥근 부분이 있는지 봐.', '② 같은 모양 두 개를 찾아.', '③ 남은 하나는 무엇일까?'],
         ...genChoices(r, odd, two),
-        hint: `${me.name}이 두 개 있어요.`,
-        solution: `${two[0]}, ${two[1]}은(는) ${me.name}이에요. ${odd}만 달라요.`,
+        hint: `세 물건 중 두 개는 같은 모양이고, 하나만 달라.\n${GEN_SHAPE_HINT}`,
+        solution: `${two[0]}, ${two[1]}은(는) ${me.name}(이)야. ${odd}만 모양이 달라.`,
       };
     },
     (r) => {
@@ -154,10 +211,10 @@ function genShapeTemplates(k) {
       return {
         type: 'step', level: '상', visual: r.shuffle([...mine, ...rest]).map((t) => t.split(' ')[0]).join(' '),
         text: `${me.name}은 모두 몇 개인가요?`,
-        steps: [`① ${me.name}에만 ○를 해요.`, '② ○를 한 물건을 하나씩 세어요.'],
+        steps: [`① ${me.look}에만 ○를 해.`, '② ○를 한 물건을 하나씩 짚으며 세어 봐. 몇 개일까?'],
         ...genChoices(r, `${n}개`, genNear(r, n, 1, 6).map((x) => `${x}개`)),
-        hint: `${me.says[0]} 이런 물건만 세어요.`,
-        solution: `${mine.join(', ')} → 모두 ${n}개예요.`,
+        hint: `${me.name}은(는) ${me.look}이야.\n${me.says[1]}\n이런 물건만 하나씩 짚으며 세어 봐. 다른 모양은 세지 마!`,
+        solution: `${mine.join(', ')} → ${me.name}은(는) 모두 ${n}개야.`,
       };
     },
   ];
@@ -186,7 +243,7 @@ function genPairTemplate(pairs, bigWord, smallWord, bigVerb, hint) {
       text: `둘 중에서 ${askBig ? bigWord : smallWord} 것은 무엇인가요?`,
       ...genChoices(r, ok, [askBig ? small : big, '둘이 같아요']),
       hint,
-      solution: `${big}이(가) ${small}보다 ${bigVerb}. 답은 ${ok}이에요.`,
+      solution: `${big}이(가) ${small}보다 ${bigVerb}. 그래서 답은 ${ok}(이)야.`,
     };
   };
 }
@@ -200,12 +257,13 @@ window.GENERATORS = {
       (r) => {
         const t = r.pick(GEN_THINGS);
         const n = r.int(2, 9);
+        const lines = Array.from({ length: n }, (_, i) => `${t.e.repeat(i + 1)} ${GEN_NATIVE[i + 1]}${i === n - 1 ? '!' : '~'}`);
         return {
           type: 'visual', level: '하', visual: row(t.e, n),
           text: `${t.n}은(는) 모두 몇 ${t.u}인가요?`,
           ...genChoices(r, `${n}${t.u}`, genNear(r, n, 1, 9).map((x) => `${x}${t.u}`)),
-          hint: '손가락으로 하나씩 짚으면서 세어 보아요.',
-          solution: `하나씩 세면 ${GEN_NATIVE.slice(1, n + 1).join(', ')} → 모두 ${n}${t.u}예요.`,
+          hint: `손가락으로 하나씩 짚으면서 세어 봐!\n${lines.join('\n')}`,
+          solution: `하나씩 세면 ${GEN_NATIVE.slice(1, n + 1).join(', ')} → 모두 ${n}${t.u}야.`,
         };
       },
       (r) => {
@@ -216,8 +274,8 @@ window.GENERATORS = {
           type: 'think', level: '하', visual: String(n),
           text: `수 ${n}${genJosa(n, '을', '를')} 바르게 읽은 것은 무엇인가요?`,
           ...genChoices(r, words[n], genNear(r, n, 1, 9).map((x) => words[x])),
-          hint: native ? '하나, 둘, 셋… 순서대로 세어 보세요.' : '일, 이, 삼… 순서대로 세어 보세요.',
-          solution: `${n}${genJosa(n, '은', '는')} "${GEN_NATIVE[n]}" 또는 "${GEN_SINO[n]}"${genJosa(n, '이', '')}라고 읽어요.`,
+          hint: `수와 읽는 말을 짝지어 봐!\n${genReadTable(n, 1, 9, (x) => words[x])}\n❓ 자리에는 앞뒤 말 사이에 오는 말이 들어가. 아래 답 중에서 찾아봐.`,
+          solution: `${n}${genJosa(n, '은', '는')} "${GEN_NATIVE[n]}" 또는 "${GEN_SINO[n]}"${genJosa(n, '이', '')}라고 읽어.`,
         };
       },
       (r) => {
@@ -227,10 +285,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '중', visual: r.shuffle([...Array(n).fill(a.e), ...Array(m).fill(b.e)]).join(' '),
           text: `${a.n}만 세면 몇 개인가요?`,
-          steps: [`① ${a.e}에만 ○를 해요.`, '② ○를 한 것을 하나씩 세어요.'],
+          steps: [`① ${a.e}에만 ○를 해.`, '② ○를 한 것만 하나씩 짚으며 세어 봐. 몇 개일까?'],
           ...genChoices(r, `${n}개`, [`${n + m}개`, ...genNear(r, n, 1, 9).map((x) => `${x}개`)]),
-          hint: `${b.n}은(는) 세지 않아요.`,
-          solution: `${a.e}만 세면 ${n}개예요. (${b.n}은(는) ${m}개)`,
+          hint: `${b.e} ${b.n}은(는) 세지 마!\n${a.e}만 하나씩 짚으며 "하나, …" 하고 세어 봐.\n마지막에 말한 수가 답이야.`,
+          solution: `${a.e}만 세면 ${n}개야. (${b.n}은(는) ${m}개)`,
         };
       },
       (r) => {
@@ -240,8 +298,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${row(t[0], n)}  →  (빈 ${t[2]})`,
           text: `${t[2]}에 ${t[1]}이(가) ${n}개 있었어요. 모두 먹었어요. 남은 ${t[1]}의 수는 무엇인가요?`,
           ...genChoices(r, '0', [String(n), '1']),
-          hint: '아무것도 없는 것을 나타내는 수가 있어요.',
-          solution: '아무것도 없는 것은 0이라 쓰고 "영"이라고 읽어요.',
+          hint: `모두 먹으면 ${t[2]}에 하나도 없어.\n아무것도 없는 것을 나타내는 수가 따로 있어. 그 수를 찾아봐.`,
+          solution: '아무것도 없는 것은 0이라고 쓰고 "영"이라고 읽어.',
         };
       },
     ],
@@ -257,8 +315,10 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: seq.map((v, i) => (i === hole ? '❓' : v)).join('  '),
           text: '❓에 알맞은 수는 무엇인가요?',
           ...genChoices(r, ans, genNear(r, ans, 1, 9)),
-          hint: down ? '수가 하나씩 작아지고 있어요.' : '수를 순서대로 세어 보세요.',
-          solution: `${seq.join(', ')} 순서예요. ❓는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: down
+            ? '왼쪽부터 소리 내어 읽어 봐. 수가 하나씩 작아지고 있어.\n❓ 바로 왼쪽 수보다 하나 작은 수가 들어가.'
+            : '왼쪽부터 소리 내어 읽어 봐. 수가 하나씩 커지고 있어.\n❓ 바로 왼쪽 수 다음에 오는 수가 들어가.',
+          solution: `${seq.join(', ')} 순서야. ❓는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -269,8 +329,10 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: up ? `${n}  →  ❓` : `❓  →  ${n}`,
           text: `${n}보다 1만큼 더 ${up ? '큰' : '작은'} 수는 무엇인가요?`,
           ...genChoices(r, ans, [up ? n - 1 : n + 1, ...genNear(r, ans, 0, 9)].filter((x) => x !== n && x >= 0)),
-          hint: up ? `${n} 바로 다음 수를 생각해요.` : `${n} 바로 앞의 수를 생각해요.`,
-          solution: `${n}보다 1만큼 더 ${up ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: up
+            ? `더 큰 쪽으로 한 칸 → 바로 다음 수야.\n수를 처음부터 순서대로 세어 봐. ${n} 바로 다음에 말하는 수가 답이야.`
+            : `더 작은 쪽으로 한 칸 → 바로 앞의 수야.\n수를 처음부터 순서대로 세어 봐. ${n}${genJosa(n, '을', '를')} 말하기 바로 전에 말한 수가 답이야.`,
+          solution: `${n}보다 1만큼 더 ${up ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -278,13 +340,14 @@ window.GENERATORS = {
         const k = r.int(2, 5);
         const left = r.int(0, 1) === 1;
         const ok = left ? five[k - 1] : five[5 - k];
+        const side = left ? '왼쪽' : '오른쪽';
         return {
           type: 'step', level: '상', visual: `왼쪽  ${five.map((a) => a[0]).join(' ')}  오른쪽`,
-          text: `${left ? '왼쪽' : '오른쪽'}에서 ${GEN_ORDER[k]}에 있는 동물은 무엇인가요?`,
-          steps: [`① ${left ? '왼쪽' : '오른쪽'} 끝에서 시작해요.`, `② 첫째, 둘째… ${GEN_ORDER[k]}까지 세어요.`],
+          text: `${side}에서 ${GEN_ORDER[k]}에 있는 동물은 무엇인가요?`,
+          steps: [`① ${side} 끝 동물에 손가락을 올려.`, `② "첫째, 둘째, …" 하고 ${GEN_ORDER[k]}까지 짚어 봐. 손가락이 멈춘 동물은 누구일까?`],
           ...genChoices(r, `${ok[0]} ${ok[1]}`, r.shuffle(five.filter((a) => a !== ok)).map((a) => `${a[0]} ${a[1]}`)),
-          hint: `${left ? '왼쪽' : '오른쪽'}부터 손가락으로 짚으며 세어요.`,
-          solution: `${left ? '왼쪽' : '오른쪽'}에서 ${GEN_ORDER[k]}는 ${ok[0]} ${ok[1]}이에요.`,
+          hint: `${side} 끝부터 시작해!\n손가락으로 하나씩 짚으며 "첫째, 둘째, …" 하고 세어 봐.\n"${GEN_ORDER[k]}"라고 말할 때 멈춰.`,
+          solution: `${side}에서 ${GEN_ORDER[k]}에 있는 동물은 ${ok[0]} ${ok[1]}(이)야.`,
         };
       },
       (r) => {
@@ -293,8 +356,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${n - 1}   ❓   ${n + 1}`,
           text: `${n - 1}${genJosa(n - 1, '과', '와')} ${n + 1} 사이에 있는 수는 무엇인가요?`,
           ...genChoices(r, n, [n - 1, n + 1]),
-          hint: `${n - 1} 다음에 오는 수예요.`,
-          solution: `${n - 1}, ${n}, ${n + 1} 순서예요. 사이에 있는 수는 ${n}${genJosa(n, '이에요', '예요')}.`,
+          hint: `수를 순서대로 세어 봐.\n${n - 1} 바로 다음, ${n + 1} 바로 앞에 오는 수가 사이에 있어.`,
+          solution: `${n - 1}, ${n}, ${n + 1} 순서야. 사이에 있는 수는 ${n}${genJosa(n, '이야', '야')}.`,
         };
       },
     ],
@@ -311,8 +374,8 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: `${row(a.e, n)}\n${row(b.e, m)}`,
           text: `${a.n}와(과) ${b.n} 중에서 더 ${more ? '많은' : '적은'} 것은 무엇인가요?`,
           ...genChoices(r, ok.n, [ok === a ? b.n : a.n, '둘이 같아요']),
-          hint: '하나씩 짝을 지어 보세요. 남는 쪽이 더 많아요.',
-          solution: `${a.n} ${n}, ${b.n} ${m}. ${Math.max(n, m)}${genJosa(Math.max(n, m), '이', '가')} ${Math.min(n, m)}보다 커요. 더 ${more ? '많은' : '적은'} 것은 ${ok.n}이에요.`,
+          hint: '위아래로 하나씩 짝을 지어 봐.\n짝 없이 남는 것이 있는 쪽 → 더 많아.\n먼저 짝이 다 떨어지는 쪽 → 더 적어.',
+          solution: `${a.n} ${n}, ${b.n} ${m}. ${Math.max(n, m)}${genJosa(Math.max(n, m), '이', '가')} ${Math.min(n, m)}보다 커. 더 ${more ? '많은' : '적은'} 것은 ${ok.n}(이)야.`,
         };
       },
       (r) => {
@@ -323,8 +386,8 @@ window.GENERATORS = {
           type: 'think', level: '하', visual: `${a}     ${b}`,
           text: `두 수 중에서 더 ${big ? '큰' : '작은'} 수는 무엇인가요?`,
           ...genChoices(r, ans, [a === ans ? b : a, '두 수가 같아요']),
-          hint: '수를 순서대로 셀 때 뒤에 나오는 수가 더 커요.',
-          solution: `${Math.max(a, b)}${genJosa(Math.max(a, b), '은', '는')} ${Math.min(a, b)}보다 커요. 더 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: '수를 처음부터 순서대로 세어 봐.\n먼저 나오는 수 → 더 작아.\n나중에 나오는 수 → 더 커.',
+          solution: `${Math.max(a, b)}${genJosa(Math.max(a, b), '은', '는')} ${Math.min(a, b)}보다 커. 더 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -335,10 +398,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '상', visual: three.join('     '),
           text: `세 수 중에서 가장 ${big ? '큰' : '작은'} 수는 무엇인가요?`,
-          steps: ['① 작은 수부터 순서대로 놓아요.', `② 가장 ${big ? '뒤' : '앞'}에 있는 수를 골라요.`],
+          steps: ['① 세 수를 작은 수부터 순서대로 놓아 봐.', `② 줄의 맨 ${big ? '뒤' : '앞'}에 있는 수는 무엇일까?`],
           ...genChoices(r, ans, three.filter((x) => x !== ans)),
-          hint: '1부터 9까지 세면서 어느 수가 먼저 나오는지 보세요.',
-          solution: `작은 수부터 놓으면 ${sorted.join(', ')}. 가장 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: '수를 처음부터 순서대로 세어 봐.\n세 수 중에서 가장 먼저 나오는 수 → 가장 작아.\n가장 나중에 나오는 수 → 가장 커.',
+          solution: `작은 수부터 놓으면 ${sorted.join(', ')}. 가장 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -351,8 +414,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${k1} ${a}${t[1]}   /   ${k2} ${b}${t[1]}`,
           text: `${t[0]}을(를) 더 ${more ? '많이' : '적게'} 가진 친구는 누구인가요?`,
           ...genChoices(r, ok, [ok === k1 ? k2 : k1, '두 친구가 같아요']),
-          hint: `${a}${genJosa(a, '과', '와')} ${b} 중에서 더 ${more ? '큰' : '작은'} 수를 찾아요.`,
-          solution: `${Math.max(a, b)}${genJosa(Math.max(a, b), '이', '가')} ${Math.min(a, b)}보다 커요. 더 ${more ? '많이' : '적게'} 가진 친구는 ${ok}이에요.`,
+          hint: `${a}${genJosa(a, '과', '와')} ${b} 중에서 더 ${more ? '큰' : '작은'} 수를 찾아봐.\n그 수만큼 가진 친구가 더 ${more ? '많이' : '적게'} 가진 친구야.`,
+          solution: `${Math.max(a, b)}${genJosa(Math.max(a, b), '이', '가')} ${Math.min(a, b)}보다 커. 더 ${more ? '많이' : '적게'} 가진 친구는 ${ok}${genJw(ok, '이야', '야')}.`,
         };
       },
     ],
@@ -373,8 +436,8 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: `${row(t.e, a)}   ➕   ${row(t.e, b)}`,
           text: `${t.n}은(는) 모두 몇 ${t.u}인가요?`,
           ...genChoices(r, `${a + b}${t.u}`, genNear(r, a + b, 1, 9).map((x) => `${x}${t.u}`)),
-          hint: `${a}에서 시작해서 ${b}만큼 이어 세어 보세요.`,
-          solution: `${a} + ${b} = ${a + b} → 모두 ${a + b}${t.u}예요.`,
+          hint: `➕ 앞의 ${t.n}은(는) 이미 ${a}${t.u}야.\n${t.e.repeat(a)}\n${genCountOnHint(t.e, a, b, `➕ 뒤의 ${t.n}`)}`,
+          solution: `${a} + ${b} = ${a + b} → ${t.n}은(는) 모두 ${a + b}${t.u}야.`,
         };
       },
       (r) => {
@@ -384,8 +447,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${a} + ${b} = ❓`,
           text: `${a} 더하기 ${b}${genJosa(b, '은', '는')} 얼마인가요?`,
           ...genChoices(r, a + b, genNear(r, a + b, 1, 9)),
-          hint: `손가락 ${a}개를 펴고, ${b}개를 더 펴 보세요.`,
-          solution: `${a} + ${b} = ${a + b}. ${a}${genJosa(a, '과', '와')} ${b}의 합은 ${a + b}${genJosa(a + b, '이에요', '예요')}.`,
+          hint: `손가락 ${a}개를 먼저 펴 봐.\n그다음 + 뒤의 수만큼 손가락을 하나씩 더 펴면서 이어 세어 봐.\n${genFingerHint(a, b, 1)}`,
+          solution: `${a} + ${b} = ${a + b}. ${a}에 ${b}${genJosa(b, '을', '를')} 더하면 모두 ${a + b}${genJosa(a + b, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -395,10 +458,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '상', visual: `${row(t[0], a)}  +  ${row(t[0], b)}`,
           text: `${t[2]}에 ${t[1]}이(가) ${a}개 있어요. ${b}개를 더 ${t[3]}. 모두 몇 개인가요?`,
-          steps: [`① 처음 수를 찾아요 → ${a}`, `② 더해진 수를 찾아요 → ${b}`, `③ 덧셈식을 써요 → ${a} + ${b}`],
+          steps: [`① 처음에 있던 수를 찾아 → ${a}`, `② 더 생긴 수를 찾아 → ${b}`, `③ ${a} + ${b}${genJosa(b, '을', '를')} 이어 세어 봐. 모두 몇 개일까?`],
           ...genChoices(r, `${a + b}개`, [`${a - b > 0 ? a - b : a + b + 1}개`, ...genNear(r, a + b, 1, 9).map((x) => `${x}개`)]),
-          hint: '"더", "모두"라는 말이 나오면 더해요.',
-          solution: `${a} + ${b} = ${a + b} → 모두 ${a + b}개예요.`,
+          hint: `"더", "모두"라는 말이 나오면 더하는 거야.\n처음 ${t[1]}은(는) 이미 ${a}개야.\n${genCountOnHint(t[0], a, b, `+ 뒤의 ${t[1]}`)}`,
+          solution: `${a} + ${b} = ${a + b} → ${t[1]}은(는) 모두 ${a + b}개야.`,
         };
       },
       (r) => {
@@ -408,8 +471,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: front ? `0 + ${a} = ❓` : `${a} + 0 = ❓`,
           text: front ? `아무것도 없는데 ${a}개를 받았어요. 모두 몇 개인가요?` : `${a}개가 있는데 더 받지 않았어요. 모두 몇 개인가요?`,
           ...genChoices(r, a, [0, a + 1 > 9 ? a - 1 : a + 1]),
-          hint: '0은 아무것도 없다는 뜻이에요.',
-          solution: `0을 더하면 수가 그대로예요. 답은 ${a}${genJosa(a, '이에요', '예요')}.`,
+          hint: '0은 아무것도 없다는 뜻이야.\n아무것도 없는 것을 더하면 늘어나는 게 없어.\n그럼 모두 몇 개일까?',
+          solution: `0을 더하면 수가 그대로야. 답은 ${a}${genJosa(a, '이야', '야')}.`,
         };
       },
     ],
@@ -419,12 +482,16 @@ window.GENERATORS = {
         const t = r.pick([['🍬', '사탕', '개를 먹었어요'], ['🎈', '풍선', '개가 터졌어요'], ['🍪', '과자', '개를 먹었어요'], ['🍎', '사과', '개를 먹었어요']]);
         const a = r.int(3, 9);
         const b = r.int(1, a - 1);
+        const left = a - b;
+        const shown = Array.from({ length: Math.min(2, left - 1) }, (_, i) => `${t[0].repeat(i + 1)} ${GEN_NATIVE[i + 1]}~`);
         return {
           type: 'visual', level: '하', visual: `${row(t[0], a - b)} ${row('✖️', b)}`,
           text: `${t[1]}이(가) ${a}개 있었어요. ${b}${t[2]}. 남은 ${t[1]}은(는) 몇 개인가요?`,
           ...genChoices(r, `${a - b}개`, genNear(r, a - b, 0, 9).map((x) => `${x}개`)),
-          hint: '✖️ 표시가 없는 것만 세어 보세요.',
-          solution: `${a} − ${b} = ${a - b} → ${a - b}개가 남아요.`,
+          hint: shown.length
+            ? `✖️는 없어진 ${t[1]}(이)야. 세지 마!\n✖️ 없는 ${t[1]}만 하나씩 짚으며 세어 봐.\n${shown.join('\n')}\n…\n마지막에 말한 수가 남은 개수야.`
+            : `✖️는 없어진 ${t[1]}(이)야. 세지 마!\n✖️ 없는 ${t[1]}만 짚으며 세어 봐. 몇 개가 남았을까?`,
+          solution: `${a} − ${b} = ${a - b} → ${t[1]}은(는) ${a - b}개가 남았어.`,
         };
       },
       (r) => {
@@ -434,8 +501,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${a} − ${b} = ❓`,
           text: `${a} 빼기 ${b}${genJosa(b, '은', '는')} 얼마인가요?`,
           ...genChoices(r, a - b, genNear(r, a - b, 0, 9)),
-          hint: `손가락 ${a}개를 펴고, ${b}개를 접어 보세요.`,
-          solution: `${a} − ${b} = ${a - b}. ${a}${genJosa(a, '과', '와')} ${b}의 차는 ${a - b}${genJosa(a - b, '이에요', '예요')}.`,
+          hint: `손가락 ${a}개를 펴 봐.\n그다음 − 뒤의 수만큼 손가락을 하나씩 접으면서 거꾸로 세어 봐.\n${genFingerHint(a, b, -1)}`,
+          solution: `${a} − ${b} = ${a - b}. ${a}개에서 ${b}개를 빼면 ${a - b}개가 남아.`,
         };
       },
       (r) => {
@@ -445,10 +512,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '상', visual: `${row(t[0], a)}\n${row(t[2], b)}`,
           text: `${t[1]}은(는) ${t[3]}보다 몇 개 더 많은가요?`,
-          steps: ['① 위아래로 하나씩 짝을 지어요.', '② 짝이 없는 것을 세어요.', `③ 뺄셈식으로 써요 → ${a} − ${b}`],
+          steps: [`① 위의 ${t[0]}와 아래의 ${t[2]}를 하나씩 짝 지어 봐.`, `② 짝이 없는 ${t[0]}만 세어 봐. 몇 개일까?`],
           ...genChoices(r, `${a - b}개`, [`${a}개`, ...genNear(r, a - b, 1, 9).map((x) => `${x}개`)]),
-          hint: '"몇 개 더 많은가"는 큰 수에서 작은 수를 빼요.',
-          solution: `${a} − ${b} = ${a - b} → ${a - b}개 더 많아요.`,
+          hint: `위아래로 하나씩 짝을 지어 봐.\n짝 없이 남는 ${t[1]}이(가) 바로 "더 많은" 만큼이야.\n남는 것만 세어 봐.`,
+          solution: `${a} − ${b} = ${a - b} → ${t[1]}이(가) ${a - b}개 더 많아.`,
         };
       },
       (r) => {
@@ -458,8 +525,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: all ? `${a} − ${a} = ❓` : `${a} − 0 = ❓`,
           text: all ? `콩 ${a}개를 모두 심었어요. 남은 콩은 몇 개인가요?` : `콩 ${a}개를 하나도 심지 않았어요. 남은 콩은 몇 개인가요?`,
           ...genChoices(r, all ? 0 : a, all ? [a, 1] : [0, a - 1]),
-          hint: all ? '모두 없어지면 아무것도 남지 않아요.' : '하나도 빼지 않으면 그대로예요.',
-          solution: all ? `${a} − ${a} = 0. 하나도 남지 않아요.` : `${a} − 0 = ${a}. 그대로 ${a}개예요.`,
+          hint: all ? '콩을 모두 심었으면 손에 남은 콩이 있을까?\n아무것도 없는 것을 나타내는 수를 떠올려 봐.' : '하나도 심지 않았으면 콩이 줄어들지 않아.\n처음에 있던 콩이 몇 개였는지 봐.',
+          solution: all ? `${a} − ${a} = 0. 하나도 남지 않아.` : `${a} − 0 = ${a}. 그대로 ${a}개야.`,
         };
       },
     ],
@@ -469,12 +536,15 @@ window.GENERATORS = {
         const a = r.int(2, 6);
         const b = r.int(1, 3);
         const steps = Array.from({ length: b }, (_, i) => a + i + 1);
+        const shown = genShown(a, b);
         return {
           type: 'visual', level: '하', visual: `${a}  →  ${steps.map(() => '⬜').join('  ')}`,
           text: `${a}에서 ${b}만큼 이어 세면 마지막 수는 무엇인가요?`,
           ...genChoices(r, a + b, genNear(r, a + b, 1, 9)),
-          hint: `${a} 다음 수부터 ${b}번 세어요.`,
-          solution: `${a} 하고 ${steps.join(', ')}. 마지막 수는 ${a + b}${genJosa(a + b, '이에요', '예요')}.`,
+          hint: shown.length
+            ? `⬜ 한 칸에 수를 하나씩 넣어 봐. ${a} 바로 다음 수부터 시작해.\n${shown.map((v) => `⬜ → ${v}`).join('\n')}\n…\n마지막 칸에 넣은 수가 답이야.`
+            : `⬜ 칸이 하나야. ${a} 바로 다음 수를 넣어 봐.\n그 수가 답이야.`,
+          solution: `${a} 하고 ${steps.join(', ')}. 마지막 수는 ${a + b}${genJosa(a + b, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -484,8 +554,8 @@ window.GENERATORS = {
           type: 'visual', level: '중', visual: `${row('🔴', a)}   ${row('🔵', b)}\n   ↘   ↙\n     ❓`,
           text: `${a}${genJosa(a, '과', '와')} ${b}${genJosa(b, '을', '를')} 모으면 얼마인가요?`,
           ...genChoices(r, a + b, genNear(r, a + b, 1, 9)),
-          hint: '두 묶음을 한곳에 모아서 세어 보세요.',
-          solution: `${a}${genJosa(a, '과', '와')} ${b}${genJosa(b, '을', '를')} 모으면 ${a + b}${genJosa(a + b, '이', '가')} 돼요.`,
+          hint: `🔴 빨간 구슬은 이미 ${a}개야.\n${genCountOnHint('🔵', a, b, '🔵 파란 구슬')}`,
+          solution: `${a}${genJosa(a, '과', '와')} ${b}${genJosa(b, '을', '를')} 모으면 ${a + b}${genJosa(a + b, '이', '가')} 돼.`,
         };
       },
       (r) => {
@@ -494,10 +564,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '상', visual: `    ${n}\n   ↙   ↘\n  ${a}     ❓`,
           text: `${n}${genJosa(n, '을', '를')} ${a}${genJosa(a, '과', '와')} 어떤 수로 가를 수 있나요?`,
-          steps: [`① ⭕를 ${n}개 그려요.`, `② ${a}개를 묶어요.`, '③ 남은 ⭕를 세어요.'],
+          steps: [`① ⭕를 ${n}개 그려 봐.`, '② 그중에서 왼쪽 아래 수만큼 ⭕를 묶어.', '③ 묶지 않은 ⭕를 세어 봐. 몇 개일까?'],
           ...genChoices(r, n - a, genNear(r, n - a, 1, 9).filter((x) => x !== a)),
-          hint: `${a}에 얼마를 더하면 ${n}${genJosa(n, '이', '가')} 되는지 생각해요.`,
-          solution: `${n}${genJosa(n, '은', '는')} ${a}${genJosa(a, '과', '와')} ${n - a}${genJosa(n - a, '으로', '로')} 가를 수 있어요.`,
+          hint: `손가락 ${n}개를 펴 봐.\n왼쪽 아래 수만큼 손가락을 접어.\n아직 펴져 있는 손가락이 ❓ 자리의 수야.`,
+          solution: `${n}${genJosa(n, '은', '는')} ${a}${genJosa(a, '과', '와')} ${n - a}${genJosa(n - a, '으로', '로')} 가를 수 있어.`,
         };
       },
       (r) => {
@@ -507,8 +577,8 @@ window.GENERATORS = {
           type: 'think', level: '상', visual: `${a} + ❓ = ${n}`,
           text: `${a}에 얼마를 더하면 ${n}${genJosa(n, '이', '가')} 되나요?`,
           ...genChoices(r, n - a, genNear(r, n - a, 1, 9)),
-          hint: `${a}에서 ${n}까지 이어 세면서 손가락을 접어 보세요.`,
-          solution: `${a} + ${n - a} = ${n}. 답은 ${n - a}${genJosa(n - a, '이에요', '예요')}.`,
+          hint: `식의 맨 앞 수에서 시작해.\n그다음 수부터 ${n}까지 이어 세면서 손가락을 하나씩 펴 봐.\n${n}에서 멈추고, 편 손가락이 몇 개인지 세어 봐.`,
+          solution: `${a} + ${n - a} = ${n}. 답은 ${n - a}${genJosa(n - a, '이야', '야')}.`,
         };
       },
     ],
@@ -527,11 +597,11 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: `${bar(x)}  ${a}\n${bar(y)}  ${b}`,
           text: `더 ${long ? '긴' : '짧은'} 것은 무엇인가요?`,
           ...genChoices(r, ok, [ok === a ? b : a, '둘이 같아요']),
-          hint: '왼쪽 끝이 맞춰져 있어요. 오른쪽 끝을 보세요.',
-          solution: `오른쪽으로 더 멀리 간 것이 더 길어요. 더 ${long ? '긴' : '짧은'} 것은 ${ok}이에요.`,
+          hint: '왼쪽 끝이 똑같이 맞춰져 있어.\n그러면 오른쪽 끝을 봐.\n오른쪽으로 더 멀리 간 것 → 더 길어.\n먼저 끝나는 것 → 더 짧아.',
+          solution: `오른쪽으로 더 멀리 간 것이 더 길어. 더 ${long ? '긴' : '짧은'} 것은 ${ok}(이)야.`,
         };
       },
-      genPairTemplate(GEN_LONG, '더 긴', '더 짧은', '더 길어요', '두 물건을 나란히 놓았다고 생각해 보세요.'),
+      genPairTemplate(GEN_LONG, '더 긴', '더 짧은', '더 길어', '두 물건을 왼쪽 끝을 맞춰서 나란히 놓았다고 생각해 봐.\n오른쪽으로 더 많이 삐져나오는 것 → 더 길어.\n덜 나오는 것 → 더 짧아.'),
       (r) => {
         const names = r.sample(GEN_LINE_THINGS, 3);
         const lens = r.sample([2, 3, 4, 5, 6, 7, 8], 3);
@@ -541,10 +611,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '중', visual: names.map((n, i) => `${bar(lens[i])}  ${n}`).join('\n'),
           text: `가장 ${long ? '긴' : '짧은'} 것은 무엇인가요?`,
-          steps: ['① 왼쪽 끝이 맞는지 확인해요.', `② 오른쪽 끝이 가장 ${long ? '멀리 간' : '가까운'} 것을 찾아요.`],
+          steps: ['① 왼쪽 끝이 맞춰져 있는지 확인해.', `② 오른쪽 끝을 손가락으로 짚어 봐. 가장 ${long ? '멀리 간' : '먼저 끝나는'} 것은 무엇일까?`],
           ...genChoices(r, ok, names.filter((n) => n !== ok)),
-          hint: '셋을 비교할 때는 "가장"이라는 말을 써요.',
-          solution: `오른쪽 끝을 보면 ${ok}이(가) 가장 ${long ? '길어요' : '짧아요'}.`,
+          hint: '세 줄의 오른쪽 끝을 하나씩 짚어 봐.\n오른쪽으로 가장 멀리 간 것 → 가장 길어.\n가장 먼저 끝나는 것 → 가장 짧아.',
+          solution: `오른쪽 끝을 보면 ${ok}이(가) 가장 ${long ? '길어' : '짧아'}.`,
         };
       },
       (r) => {
@@ -554,14 +624,14 @@ window.GENERATORS = {
           type: 'think', level: '상', visual: `${a} > ${b}\n${b} > ${c}`,
           text: `${a}은(는) ${b}보다 길어요. ${b}은(는) ${c}보다 길어요. 가장 ${long ? '긴' : '짧은'} 것은 무엇인가요?`,
           ...genChoices(r, long ? a : c, [b, long ? c : a]),
-          hint: '긴 것부터 차례로 줄을 세워 보세요.',
-          solution: `긴 것부터 ${a}, ${b}, ${c} 순서예요. 가장 ${long ? '긴' : '짧은'} 것은 ${long ? a : c}이에요.`,
+          hint: '긴 것부터 차례로 줄을 세워 봐.\n두 문장에 모두 나오는 것은 줄의 가운데에 서.\n가운데보다 긴 것은 맨 앞, 짧은 것은 맨 뒤야.',
+          solution: `긴 것부터 ${a}, ${b}, ${c} 순서야. 가장 ${long ? '긴' : '짧은'} 것은 ${long ? a : c}(이)야.`,
         };
       },
     ],
     // 4-2 무게
     [
-      genPairTemplate(GEN_HEAVY, '더 무거운', '더 가벼운', '더 무거워요', '두 손에 하나씩 들었다고 생각해 보세요.'),
+      genPairTemplate(GEN_HEAVY, '더 무거운', '더 가벼운', '더 무거워', '두 손에 하나씩 들었다고 생각해 봐.\n들기 힘들고 손이 아래로 쑥 내려가는 것 → 더 무거워.\n가뿐하게 들리는 것 → 더 가벼워.'),
       (r) => {
         const [down, up] = r.sample(GEN_KIDS, 2);
         const heavy = r.int(0, 1) === 1;
@@ -569,8 +639,8 @@ window.GENERATORS = {
           type: 'visual', level: '중', visual: `⬇️ ${down}          ${up} ⬆️`,
           text: `시소에서 ${down} 쪽이 내려갔어요. 더 ${heavy ? '무거운' : '가벼운'} 친구는 누구인가요?`,
           ...genChoices(r, heavy ? down : up, [heavy ? up : down, '두 친구가 같아요']),
-          hint: '시소는 무거운 쪽이 아래로 내려가요.',
-          solution: `내려간 쪽이 더 무거워요. 더 ${heavy ? '무거운' : '가벼운'} 친구는 ${heavy ? down : up}이에요.`,
+          hint: '시소는 무거운 쪽이 아래로 내려가.\n⬇️ 내려간 쪽 → 더 무거워.\n⬆️ 올라간 쪽 → 더 가벼워.',
+          solution: `내려간 쪽이 더 무거워. 더 ${heavy ? '무거운' : '가벼운'} 친구는 ${heavy ? down : up}${genJw(heavy ? down : up, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -580,27 +650,28 @@ window.GENERATORS = {
         return {
           type: 'step', level: '중', visual: r.shuffle(three).join('   '),
           text: `가장 ${heavy ? '무거운' : '가벼운'} 것은 무엇인가요?`,
-          steps: ['① 둘씩 골라 어느 것이 더 무거운지 생각해요.', `② 가장 ${heavy ? '무거운' : '가벼운'} 것을 골라요.`],
+          steps: ['① 둘씩 골라서 어느 것이 더 무거운지 생각해 봐.', `② 셋 중에서 가장 ${heavy ? '무거운' : '가벼운'} 것은 무엇일까?`],
           ...genChoices(r, ok, three.filter((t) => t !== ok)),
-          hint: '들기 가장 힘든 것이 가장 무거워요.',
-          solution: `무거운 것부터 ${three.join(', ')} 순서예요. 가장 ${heavy ? '무거운' : '가벼운'} 것은 ${ok}이에요.`,
+          hint: '하나씩 들어 본다고 생각해 봐.\n들기 가장 힘든 것 → 가장 무거워.\n가장 가뿐하게 들리는 것 → 가장 가벼워.',
+          solution: `무거운 것부터 ${three.join(', ')} 순서야. 가장 ${heavy ? '무거운' : '가벼운'} 것은 ${ok}(이)야.`,
         };
       },
       (r) => {
         const [a, b, c] = r.sample(GEN_KIDS, 3);
         const heavy = r.int(0, 1) === 1;
+        const ok = heavy ? a : c;
         return {
           type: 'think', level: '상', visual: `⬇️ ${a}   ${b} ⬆️\n⬇️ ${b}   ${c} ⬆️`,
           text: `${a}은(는) ${b}보다 무거워요. ${b}은(는) ${c}보다 무거워요. 가장 ${heavy ? '무거운' : '가벼운'} 친구는 누구인가요?`,
           ...genChoices(r, heavy ? a : c, [b, heavy ? c : a]),
-          hint: '무거운 친구부터 차례로 줄을 세워 보세요.',
-          solution: `무거운 순서는 ${a}, ${b}, ${c}이에요. 가장 ${heavy ? '무거운' : '가벼운'} 친구는 ${heavy ? a : c}이에요.`,
+          hint: '무거운 친구부터 차례로 줄을 세워 봐.\n두 문장에 모두 나오는 친구는 줄의 가운데에 서.\n그 친구보다 무거운 친구는 맨 앞, 가벼운 친구는 맨 뒤야.',
+          solution: `무거운 순서는 ${a}, ${b}, ${c}(이)야. 가장 ${heavy ? '무거운' : '가벼운'} 친구는 ${ok}${genJw(ok, '이야', '야')}.`,
         };
       },
     ],
     // 4-3 담을 수 있는 양
     [
-      genPairTemplate(GEN_MUCH, '담을 수 있는 양이 더 많은', '담을 수 있는 양이 더 적은', '더 많이 담을 수 있어요', '물을 가득 채운다고 생각해 보세요. 큰 그릇에 더 많이 들어가요.'),
+      genPairTemplate(GEN_MUCH, '담을 수 있는 양이 더 많은', '담을 수 있는 양이 더 적은', '더 많이 담을 수 있어', '물을 가득 채운다고 생각해 봐.\n그릇이 더 크면 → 물이 더 많이 들어가.\n그릇이 더 작으면 → 물이 더 적게 들어가.'),
       (r) => {
         const [x, y] = r.sample([1, 2, 3, 4, 5], 2);
         const more = r.int(0, 1) === 1;
@@ -609,8 +680,8 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: `가 컵  ${water(x)}\n나 컵  ${water(y)}`,
           text: `똑같은 컵에 물을 담았어요. 물이 더 ${more ? '많은' : '적은'} 컵은 무엇인가요?`,
           ...genChoices(r, `${ok} 컵`, [`${ok === '가' ? '나' : '가'} 컵`, '둘이 같아요']),
-          hint: '같은 컵이라면 물의 높이를 보면 돼요.',
-          solution: `파란 칸이 많을수록 물이 많아요. 물이 더 ${more ? '많은' : '적은'} 컵은 ${ok} 컵이에요.`,
+          hint: '컵이 똑같으면 물의 높이만 보면 돼.\n파란 칸 🟦이 많으면 → 물이 더 많아.\n파란 칸이 적으면 → 물이 더 적어.',
+          solution: `파란 칸이 많을수록 물이 많아. 물이 더 ${more ? '많은' : '적은'} 컵은 ${ok} 컵이야.`,
         };
       },
       (r) => {
@@ -622,10 +693,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '중', visual: names.map((n, i) => `${n} 컵  ${water(lv[i])}`).join('\n'),
           text: `똑같은 컵 세 개에 물을 담았어요. 물이 가장 ${more ? '많은' : '적은'} 컵은 무엇인가요?`,
-          steps: ['① 컵마다 파란 칸을 세어요.', `② 칸이 가장 ${more ? '많은' : '적은'} 컵을 골라요.`],
+          steps: ['① 컵마다 파란 칸 🟦을 세어 봐.', `② 파란 칸이 가장 ${more ? '많은' : '적은'} 컵은 어느 컵일까?`],
           ...genChoices(r, `${ok} 컵`, names.filter((n) => n !== ok).map((n) => `${n} 컵`)),
-          hint: '물의 높이가 높을수록 물이 많아요.',
-          solution: `파란 칸은 가 ${lv[0]}칸, 나 ${lv[1]}칸, 다 ${lv[2]}칸이에요. 가장 ${more ? '많은' : '적은'} 컵은 ${ok} 컵이에요.`,
+          hint: '컵이 똑같으면 물의 높이만 보면 돼.\n파란 칸이 가장 많은 컵 → 물이 가장 많아.\n파란 칸이 가장 적은 컵 → 물이 가장 적어.',
+          solution: `파란 칸은 가 ${lv[0]}칸, 나 ${lv[1]}칸, 다 ${lv[2]}칸이야. 가장 ${more ? '많은' : '적은'} 컵은 ${ok} 컵이야.`,
         };
       },
       (r) => {
@@ -635,8 +706,8 @@ window.GENERATORS = {
           type: 'think', level: '상', visual: `${small} × ${n}번  →  ${big} 가득`,
           text: `${small.slice(small.indexOf(' ') + 1)}(으)로 물을 ${n}번 부었더니 ${big.slice(big.indexOf(' ') + 1)}이(가) 가득 찼어요. 담을 수 있는 양이 더 많은 것은 무엇인가요?`,
           ...genChoices(r, big, [small, '둘이 같아요']),
-          hint: '여러 번 부어야 가득 차는 그릇이 더 커요.',
-          solution: `${n}번이나 부어야 가득 찼어요. ${big}에 더 많이 담을 수 있어요.`,
+          hint: '작은 그릇으로 여러 번 부어야 가득 차는 그릇이 있어.\n여러 번 부어야 차는 그릇 → 더 많이 담을 수 있어.',
+          solution: `${n}번이나 부어야 가득 찼어. ${big}에 더 많이 담을 수 있어.`,
         };
       },
     ],
@@ -653,8 +724,8 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: `${'🔵'.repeat(10)}\n${'🔵'.repeat(k)}`,
           text: '구슬은 모두 몇 개인가요? (윗줄은 10개예요.)',
           ...genChoices(r, `${n}개`, genNear(r, n, 10, 19).map((x) => `${x}개`)),
-          hint: `10개씩 묶음 1개와 낱개 ${k}개예요.`,
-          solution: `10개씩 묶음 1개와 낱개 ${k}개 → ${n}개예요.`,
+          hint: `윗줄은 이미 10개야. "열"까지 센 거야.\n${genCountOnHint('🔵', 10, k, '아랫줄 구슬')}`,
+          solution: `10개씩 묶음 1개와 낱개 ${k}개 → 모두 ${n}개야.`,
         };
       },
       (r) => {
@@ -663,33 +734,35 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: `${'🔴'.repeat(a)}${'⚪'.repeat(10 - a)}`,
           text: `10은 ${a}${genJosa(a, '과', '와')} 어떤 수로 가를 수 있나요?`,
           ...genChoices(r, 10 - a, genNear(r, 10 - a, 1, 9)),
-          hint: '하얀 구슬을 세어 보세요.',
-          solution: `10은 ${a}${genJosa(a, '과', '와')} ${10 - a}${genJosa(10 - a, '으로', '로')} 가를 수 있어요.`,
+          hint: '구슬은 모두 10개야.\n🔴 빨간 구슬이 앞의 수만큼 있어. 빨간 구슬은 세지 마!\n⚪ 하얀 구슬만 하나씩 짚으며 세어 봐. 그 수가 답이야.',
+          solution: `10은 ${a}${genJosa(a, '과', '와')} ${10 - a}${genJosa(10 - a, '으로', '로')} 가를 수 있어.`,
         };
       },
       (r) => {
         const k = r.int(1, 9);
         const n = 10 + k;
         const read = (x) => `십${GEN_SINO[x - 10]}`;
+        const ex = n === 12 ? 15 : 12;
         return {
           type: 'think', level: '중', visual: String(n),
           text: `수 ${n}${genJosa(n, '을', '를')} 바르게 읽은 것은 무엇인가요?`,
           ...genChoices(r, read(n), genNear(r, n, 11, 19).map(read)),
-          hint: '10개씩 묶음 1개는 "십"이라고 읽어요.',
-          solution: `${n}${genJosa(n, '은', '는')} "${read(n)}"${genJosa(k, '이', '')}라고 읽어요.`,
+          hint: `10은 "십"이라고 읽어.\n10보다 큰 수는 "십" 다음에 뒤의 수를 붙여 읽어.\n예) ${ex} → 십 + ${GEN_SINO[ex - 10]} → ${read(ex)}\n${n}의 뒤의 수는 어떻게 읽을까?`,
+          solution: `${n}${genJosa(n, '은', '는')} "${read(n)}"${genJosa(k, '이', '')}라고 읽어.`,
         };
       },
       (r) => {
         const a = r.int(6, 9);
         const b = r.int(11 - a, 9);
         const seq = Array.from({ length: b }, (_, i) => a + i + 1);
+        const shown = genShown(a, b);
         return {
           type: 'step', level: '상', visual: `${'⚫'.repeat(a)}   ${'⚪'.repeat(b)}`,
           text: `${a}${genJosa(a, '과', '와')} ${b}${genJosa(b, '을', '를')} 모으면 얼마인가요?`,
-          steps: [`① ${a}에서 시작해요.`, `② ${b}번 이어 세요 → ${seq.slice(0, 2).join(', ')}…`, '③ 마지막 수가 답이에요.'],
+          steps: [`① ⚫는 이미 ${a}개야. ${a}에서 시작해.`, `② ⚪를 하나씩 짚으며 이어 세어 봐 → ${shown.length ? `${shown.join(', ')}, …` : '…'}`, '③ 마지막 ⚪에서 말한 수는 몇일까?'],
           ...genChoices(r, a + b, genNear(r, a + b, 10, 19)),
-          hint: `${a} 하고 ${seq[0]}, ${seq[1] || ''}… 이어 세어 보세요.`,
-          solution: `${a} 하고 ${seq.join(', ')}. 모으면 ${a + b}${genJosa(a + b, '이에요', '예요')}.`,
+          hint: `⚫ 검은 바둑돌은 이미 ${a}개야.\n${genCountOnHint('⚪', a, b, '⚪ 흰 바둑돌')}`,
+          solution: `${a} 하고 ${seq.join(', ')}. 모으면 ${a + b}${genJosa(a + b, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -698,10 +771,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '상', visual: `    ${n}\n   ↙   ↘\n  ${a}     ❓`,
           text: `${n}${genJosa(n, '을', '를')} ${a}${genJosa(a, '과', '와')} 어떤 수로 가를 수 있나요?`,
-          steps: [`① 바둑돌 ${n}개를 놓아요.`, `② ${a}개를 한쪽으로 옮겨요.`, '③ 남은 바둑돌을 세어요.'],
+          steps: [`① 바둑돌 ${n}개를 놓아 봐.`, '② 왼쪽 아래 수만큼 바둑돌을 한쪽으로 옮겨.', '③ 남은 바둑돌을 세어 봐. 몇 개일까?'],
           ...genChoices(r, n - a, genNear(r, n - a, 1, 12).filter((x) => x !== a)),
-          hint: `${a}에서 ${n}까지 이어 세면서 손가락을 접어 보세요.`,
-          solution: `${n}${genJosa(n, '은', '는')} ${a}${genJosa(a, '과', '와')} ${n - a}${genJosa(n - a, '으로', '로')} 가를 수 있어요.`,
+          hint: `왼쪽 아래 수에서 시작해.\n그다음 수부터 ${n}까지 이어 세면서 손가락을 하나씩 펴 봐.\n${n}에서 멈추고, 편 손가락이 몇 개인지 세어 봐.`,
+          solution: `${n}${genJosa(n, '은', '는')} ${a}${genJosa(a, '과', '와')} ${n - a}${genJosa(n - a, '으로', '로')} 가를 수 있어.`,
         };
       },
     ],
@@ -709,12 +782,14 @@ window.GENERATORS = {
     [
       (r) => {
         const t = r.int(2, 5);
+        const tensWord = ['', '십', '이십', '삼십', '사십', '오십'];
+        const shown = genShown(0, t).map((x) => `🔟 ${tensWord[x]}~`);
         return {
           type: 'visual', level: '하', visual: Array(t).fill('🔟').join(' '),
           text: `10개씩 묶음이 ${t}개 있어요. 모두 몇 개인가요?`,
           ...genChoices(r, `${t * 10}개`, [t * 10 - 10, t * 10 + 10, t].map((x) => `${x}개`)),
-          hint: '십, 이십, 삼십… 10씩 뛰어 세어 보세요.',
-          solution: `10개씩 묶음 ${t}개는 ${t * 10}이에요.`,
+          hint: `🔟 하나는 10개야.\n🔟를 하나씩 짚으며 10씩 뛰어 세어 봐.\n${shown.join('\n')}\n…\n마지막에 말한 수가 답이야.`,
+          solution: `10개씩 묶음 ${t}개는 ${t * 10}${genJosa(t * 10, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -725,8 +800,8 @@ window.GENERATORS = {
           type: 'visual', level: '중', visual: `${Array(t).fill('🔟').join(' ')}   ${'🔹'.repeat(k)}`,
           text: `10개씩 묶음 ${t}개와 낱개 ${k}개는 모두 몇 개인가요?`,
           ...genChoices(r, `${n}개`, [k * 10 + t, n + 10 > 50 ? n - 10 : n + 10, t + k].filter((x) => x !== n).map((x) => `${x}개`)),
-          hint: '묶음의 수를 앞에, 낱개의 수를 뒤에 써요.',
-          solution: `10개씩 묶음 ${t}개 → ${t * 10}, 낱개 ${k}개 → 모두 ${n}개예요.`,
+          hint: '10개씩 묶음의 수를 앞에, 낱개의 수를 뒤에 나란히 써.\n예) 묶음 1개, 낱개 5개 → 15',
+          solution: `10개씩 묶음 ${t}개 → ${t * 10}, 낱개 ${k}개 → 모두 ${n}개야.`,
         };
       },
       (r) => {
@@ -734,13 +809,17 @@ window.GENERATORS = {
         const k = r.int(1, 9);
         const n = t * 10 + k;
         const askTens = r.int(0, 1) === 1 || t === k;
+        const ans = askTens ? t : k;
+        // 예시 수: 정답 숫자가 들어가지 않게 골라요.
+        const et = [1, 2, 3, 4].find((x) => x !== ans && x !== t);
+        const eo = [5, 6, 7, 8, 9, 3].find((x) => x !== ans && x !== et && x !== k);
         return {
           type: 'step', level: '중', visual: String(n),
           text: `${n}에서 ${askTens ? '10개씩 묶음은 몇 개' : '낱개는 몇 개'}인가요?`,
-          steps: [`① 앞의 수 ${t} → 10개씩 묶음`, `② 뒤의 수 ${k} → 낱개`],
-          ...genChoices(r, `${askTens ? t : k}개`, [askTens ? k : t, n, (askTens ? t : k) + 1].filter((x) => x !== (askTens ? t : k)).map((x) => `${x}개`)),
-          hint: '두 자리 수에서 앞의 수는 묶음, 뒤의 수는 낱개예요.',
-          solution: `${n}${genJosa(n, '은', '는')} 10개씩 묶음 ${t}개와 낱개 ${k}개예요.`,
+          steps: ['① 두 자리 수에서 앞에 쓴 수는 10개씩 묶음의 수야.', '② 뒤에 쓴 수는 낱개의 수야.', `③ 그럼 ${n}에서 ${askTens ? '앞에 쓴 수' : '뒤에 쓴 수'}는 무엇일까?`],
+          ...genChoices(r, `${ans}개`, [askTens ? k : t, n, ans + 1].filter((x) => x !== ans).map((x) => `${x}개`)),
+          hint: `두 자리 수에서 앞의 수 → 10개씩 묶음, 뒤의 수 → 낱개야.\n예) ${et}${eo} → 10개씩 묶음 ${et}개, 낱개 ${eo}개`,
+          solution: `${n}${genJosa(n, '은', '는')} 10개씩 묶음 ${t}개와 낱개 ${k}개야.`,
         };
       },
       (r) => {
@@ -751,8 +830,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: String(t * 10),
           text: `수 ${t * 10}을 바르게 읽은 것은 무엇인가요?`,
           ...genChoices(r, `${words[t]}(${native[t]})`, [t - 1, t + 1 > 5 ? t - 2 : t + 1].map((x) => `${words[x]}(${native[x]})`)),
-          hint: '십, 이십, 삼십, 사십, 오십 순서예요.',
-          solution: `${t * 10}은 "${words[t]}" 또는 "${native[t]}"이라고 읽어요.`,
+          hint: `10씩 커지는 수와 읽는 말을 짝지어 봐!\n${genReadTable(t, 1, 5, (x) => `${words[x]}(${native[x]})`, (x) => x * 10)}\n❓ 자리에는 앞뒤 말 사이에 오는 말이 들어가.`,
+          solution: `${t * 10}은 "${words[t]}" 또는 "${native[t]}"${genJw(native[t], '이', '')}라고 읽어.`,
         };
       },
       (r) => {
@@ -764,8 +843,8 @@ window.GENERATORS = {
           type: 'think', level: '상', visual: `${Array(t).fill('🔟').join(' ')}   ${'🔹'.repeat(k)}`,
           text: `${thing[0]}이(가) 10개씩 ${t}${thing[1]} 있어요. 낱개로 ${k}개가 더 있어요. 모두 몇 개인가요?`,
           ...genChoices(r, `${n}개`, [t + k, k * 10 + t, n + 1].filter((x) => x !== n).map((x) => `${x}개`)),
-          hint: `10개씩 ${t}${thing[1]}은(는) ${t * 10}개예요.`,
-          solution: `${t * 10}개와 ${k}개 → 모두 ${n}개예요.`,
+          hint: `10개씩 ${t}${thing[1]}은(는) 10개씩 묶음 ${t}개야.\n묶음의 수를 앞에, 낱개의 수를 뒤에 나란히 써 봐.`,
+          solution: `${t * 10}개와 ${k}개 → 모두 ${n}개야.`,
         };
       },
     ],
@@ -779,8 +858,8 @@ window.GENERATORS = {
           type: 'visual', level: '하', visual: seq.map((v, i) => (i === hole ? '❓' : v)).join('  '),
           text: '❓에 알맞은 수는 무엇인가요?',
           ...genChoices(r, seq[hole], genNear(r, seq[hole], 1, 50)),
-          hint: '수가 1씩 커지고 있어요.',
-          solution: `${seq.join(', ')} 순서예요. ❓는 ${seq[hole]}${genJosa(seq[hole], '이에요', '예요')}.`,
+          hint: '왼쪽부터 소리 내어 읽어 봐. 수가 1씩 커지고 있어.\n❓ 바로 왼쪽 수 다음에 오는 수가 들어가.',
+          solution: `${seq.join(', ')} 순서야. ❓는 ${seq[hole]}${genJosa(seq[hole], '이야', '야')}.`,
         };
       },
       (r) => {
@@ -791,8 +870,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: up ? `${n}  →  ❓` : `❓  →  ${n}`,
           text: `${n}보다 1만큼 더 ${up ? '큰' : '작은'} 수는 무엇인가요?`,
           ...genChoices(r, ans, [up ? n - 1 : n + 1, up ? n + 10 : n - 10].filter((x) => x > 0)),
-          hint: up ? `${n} 바로 다음 수예요.` : `${n} 바로 앞의 수예요.`,
-          solution: `${n}보다 1만큼 더 ${up ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: up ? `1만큼 더 큰 수는 바로 다음 수야.\n${n}부터 소리 내어 하나 더 세어 봐.` : `1만큼 더 작은 수는 바로 앞의 수야.\n${n}에서 거꾸로 하나 세어 봐.`,
+          solution: `${n}보다 1만큼 더 ${up ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -804,8 +883,10 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${a}     ${b}`,
           text: `두 수 중에서 더 ${big ? '큰' : '작은'} 수는 무엇인가요?`,
           ...genChoices(r, ans, [a === ans ? b : a, '두 수가 같아요']),
-          hint: sameTens ? '10개씩 묶음의 수가 같으면 낱개의 수를 비교해요.' : '10개씩 묶음의 수부터 비교해요.',
-          solution: `${Math.max(a, b)}${genJosa(Math.max(a, b), '은', '는')} ${Math.min(a, b)}보다 커요. 더 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: sameTens
+            ? '두 수의 앞의 수(10개씩 묶음)가 같아.\n그러면 뒤의 수(낱개)를 비교해 봐.\n뒤의 수가 더 크면 → 더 큰 수야.'
+            : '두 수의 앞의 수(10개씩 묶음)부터 비교해 봐.\n앞의 수가 더 크면 → 더 큰 수야.',
+          solution: `${Math.max(a, b)}${genJosa(Math.max(a, b), '은', '는')} ${Math.min(a, b)}보다 커. 더 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -816,10 +897,10 @@ window.GENERATORS = {
         return {
           type: 'step', level: '상', visual: three.join('     '),
           text: `세 수 중에서 가장 ${big ? '큰' : '작은'} 수는 무엇인가요?`,
-          steps: ['① 10개씩 묶음의 수를 먼저 비교해요.', '② 묶음의 수가 같으면 낱개의 수를 비교해요.', `③ 가장 ${big ? '큰' : '작은'} 수를 골라요.`],
+          steps: ['① 10개씩 묶음의 수(앞의 수)를 먼저 비교해 봐.', '② 앞의 수가 같으면 낱개의 수(뒤의 수)를 비교해 봐.', `③ 그럼 가장 ${big ? '큰' : '작은'} 수는 무엇일까?`],
           ...genChoices(r, ans, three.filter((x) => x !== ans)),
-          hint: '앞의 수(10개씩 묶음)가 클수록 큰 수예요.',
-          solution: `작은 수부터 놓으면 ${sorted.join(', ')}. 가장 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이에요', '예요')}.`,
+          hint: '앞의 수(10개씩 묶음)가 클수록 큰 수야.\n앞의 수가 같으면 뒤의 수(낱개)가 큰 쪽이 더 커.',
+          solution: `작은 수부터 놓으면 ${sorted.join(', ')}. 가장 ${big ? '큰' : '작은'} 수는 ${ans}${genJosa(ans, '이야', '야')}.`,
         };
       },
       (r) => {
@@ -828,8 +909,8 @@ window.GENERATORS = {
           type: 'think', level: '중', visual: `${n - 1}   ❓   ${n + 1}`,
           text: `${n - 1}${genJosa(n - 1, '과', '와')} ${n + 1} 사이에 있는 수는 무엇인가요?`,
           ...genChoices(r, n, [n - 1, n + 1]),
-          hint: `${n - 1} 바로 다음 수예요.`,
-          solution: `${n - 1}, ${n}, ${n + 1} 순서예요. 사이에 있는 수는 ${n}${genJosa(n, '이에요', '예요')}.`,
+          hint: `수를 순서대로 세어 봐.\n${n - 1} 바로 다음, ${n + 1} 바로 앞에 오는 수가 사이에 있어.`,
+          solution: `${n - 1}, ${n}, ${n + 1} 순서야. 사이에 있는 수는 ${n}${genJosa(n, '이야', '야')}.`,
         };
       },
     ],
@@ -839,15 +920,15 @@ window.GENERATORS = {
 /* ============================== 만들기 ============================== */
 const GEN_CACHE = {};
 
-/** 한글 조사 "은(는)" 같은 표기를 앞 글자의 받침에 맞게 골라요. */
+/** 한글 조사 "은(는)" 같은 표기를 앞 글자의 받침에 맞게 골라요. ("(이)야" → 받침 있으면 "이야", 없으면 "야") */
 function genFixJosa(s) {
-  const pairs = { '은(는)': ['은', '는'], '이(가)': ['이', '가'], '을(를)': ['을', '를'], '와(과)': ['과', '와'], '(으)로': ['으로', '로'], '이에요': ['이에요', '예요'] };
-  return String(s).replace(/([가-힣])(\s?)(은\(는\)|이\(가\)|을\(를\)|와\(과\)|\(으\)로|이에요)/g, (m, ch, sp, j) => {
+  const pairs = { '은(는)': ['은', '는'], '이(가)': ['이', '가'], '을(를)': ['을', '를'], '와(과)': ['과', '와'], '(으)로': ['으로', '로'], '이에요': ['이에요', '예요'], '(이)야': ['이야', '야'] };
+  return String(s).replace(/([가-힣])(\s?)(은\(는\)|이\(가\)|을\(를\)|와\(과\)|\(으\)로|이에요|\(이\)야)/g, (m, ch, sp, j) => {
     const code = (ch.charCodeAt(0) - 0xac00) % 28;
     const [withFinal, without] = pairs[j];
     // "(으)로"는 ㄹ 받침 뒤에서도 "로"예요.
     const final = j === '(으)로' ? code !== 0 && code !== 8 : code !== 0;
-    return ch + (final ? withFinal : without);
+    return ch + (j === '(이)야' ? '' : sp) + (final ? withFinal : without);
   });
 }
 

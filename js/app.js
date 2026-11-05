@@ -42,7 +42,7 @@ const PUBLIC_SCREENS = ['splash', 'loading', 'intro', 'login', 'signup'];
 /** 피그마 무대(stage.js)로 그리는 화면 */
 const FIGMA_SCREENS = ['splash', 'loading'];
 /** 학교 화면 (school.js) */
-const SCHOOL_SCREENS = ['home', 'room', 'talk', 'quiz', 'friendmade'];
+const SCHOOL_SCREENS = ['home', 'room', 'talk', 'quiz', 'friendmade', 'after'];
 /** 화면 사이를 오갈 때 펼친 메뉴는 닫아요. */
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
@@ -291,7 +291,7 @@ function quizParts() {
   const q = State.quiz;
   const item = q.questions[q.index];
   const p = Problem.from(item);
-  const rep = pickRep(p, q.rep || Profile.get().rep);
+  const rep = pickRep(p, q.rep || State.repPref || 'numbers'); // 문제 화면에서 고른 보기 방법을 다음 문제에도 이어 써요
   // 펜슬 모드: 손글씨 → (안 되면) 숫자패드 → 색 카드
   const input = pickInput(p, Profile.mode().input);
   return { q, item, p, rep, input };
@@ -329,6 +329,7 @@ function inputNumpad(parts) {
 
 /** 소리 도움 모드: 문제가 바뀌면 문제 → 보기 차례로 읽어 줘요. */
 function readProblem() {
+  if (typeof Sim !== 'undefined' && Sim.s) Speech.voice = Sim.friend().voice || null;
   const parts = [];
   const add = (el) => el && parts.push({ text: el.innerText || el.textContent, el });
   const card = document.querySelector('.quiz-problem');
@@ -345,6 +346,7 @@ function afterQuizRender() {
   const key = `${q.orig && q.orig.id}:${q.tries.length}:${q.checked}:${q.hintLv}`;
   if (!Profile.mode().autoRead || q.readKey === key) return;
   q.readKey = key;
+  if (Sim.s) Speech.voice = Sim.friend().voice || null;
   if (q.say) {
     const say = document.querySelector('.q-say span');
     if (say) Speech.readEl(say);
@@ -365,6 +367,7 @@ function screenLeader() {
   const user = Store.currentUser();
   const students = Store.leaderStudents();
   const notices = Store.leaderNotices();
+  const unseen = notices.filter((n) => !Notices.seen(n)).length;
 
   return `
     ${hud({ name: user.name, title: `${esc(user.name)} 지도자님`, logout: true })}
@@ -373,7 +376,7 @@ function screenLeader() {
       <div class="set-group">
         ${students
           .map((s) =>
-            leaderRow({ attr: `data-student="${esc(s.id)}"`, icon: esc([...s.name][0]), title: esc(s.name), sub: `아이디 ${esc(s.id)} · ${s.grade}학년` })
+            leaderRow({ attr: `data-student="${esc(s.id)}"`, icon: esc([...s.name][0]), title: esc(s.name), sub: `아이디 ${esc(s.id)}` })
           )
           .join('')}
         ${
@@ -390,7 +393,7 @@ function screenLeader() {
 
       <h3 class="set-title">더 보기</h3>
       <div class="set-group">
-        ${leaderRow({ attr: 'data-go="notices"', icon: '🔔', title: '알림', badge: notices.length || '' })}
+        ${leaderRow({ attr: 'data-go="notices"', icon: '🔔', title: '알림', badge: unseen || '' })}
         ${leaderRow({ attr: 'data-go="inquiry"', icon: '✉️', title: '문의하기' })}
       </div>
     </main>`;
@@ -420,7 +423,7 @@ function screenLeaderStudent() {
     </label>`;
   }).join('');
   const today = todayStr();
-  const friends = Object.entries(data.friends || {}).map(([chId, f]) => ({ ch: CHAPTER_BY_ID[chId], f, who: friendById(f.friendId) })).filter((x) => x.ch);
+  const friends = Object.entries(data.friends || {}).map(([chId, f]) => ({ ch: CHAPTER_BY_ID[chId], f, who: friendById(chapterFriendId(chId, f.friendId)) })).filter((x) => x.ch);
   return `
     ${hud({ back: 'leader', title: `${esc(s.name)} 설정` })}
     <main class="page settings">
@@ -437,7 +440,7 @@ function screenLeaderStudent() {
         friends.length
           ? `<div class="set-group">${friends
               .map(({ ch, f, who }) => `<div class="set-row static"><span class="set-ico" aria-hidden="true">${f.next <= today ? '❗' : '🙂'}</span>
-                <span class="set-body"><strong>${esc(who.name)} · ${esc(ch.title)}</strong><small>${ch.grade}학년 ${getSubject(ch.subject).name} · 숙달도 ${f.M}점 · ${f.next <= today ? '오늘 복습할 차례' : `다음 복습 ${f.next}`}${f.lowConf ? ' · 판단 근거가 부족해 복습을 앞당겼어요' : ''}</small></span></div>`)
+                <span class="set-body"><strong>${esc(who.name)} · ${esc(ch.title)}</strong><small>${getSubject(ch.subject).name} · 숙달도 ${f.M}점 · ${f.next <= today ? '오늘 복습할 차례' : `다음 복습 ${f.next}`}${f.lowConf ? ' · 판단 근거가 부족해 복습을 앞당겼어요' : ''}</small></span></div>`)
               .join('')}</div>`
           : '<p class="set-help">아직 친구가 된 단원이 없어요.</p>'
       }
@@ -445,7 +448,7 @@ function screenLeaderStudent() {
       <div class="set-group">
         <button class="set-row danger" data-remove-student><span class="set-ico" aria-hidden="true">➖</span><span class="set-body"><strong>학생 목록에서 빼기</strong><small>학생의 학습 기록은 지워지지 않아요</small></span></button>
       </div>
-      <p class="set-help">아이디 ${esc(s.id)} · ${s.grade}학년${s.birth ? ` · ${esc(s.birth)} 출생` : ''}</p>
+      <p class="set-help">아이디 ${esc(s.id)}</p>
     </main>`;
 }
 
@@ -597,8 +600,36 @@ function reportMastery(studentId) {
 }
 
 /* ========================== 13. 지도자: 알림 · 문의하기 ========================== */
+/** 알림 읽음 표시: 한 번 본 알림은 다른 화면에 갔다 와도 "새 알림"으로 세지 않아요. (이 기기에 기억) */
+const Notices = {
+  key() {
+    const u = Store.currentUser();
+    return `hg-notice-seen:${u ? u.id : ''}`;
+  },
+  id: (n) => `${todayStr()}|${n.id}|${n.text}`,
+  _read() {
+    try {
+      return JSON.parse(localStorage.getItem(this.key()) || '[]');
+    } catch (e) {
+      return [];
+    }
+  },
+  seen(n) {
+    return this._read().includes(this.id(n));
+  },
+  markAll(list) {
+    const ids = [...new Set([...this._read(), ...list.map((n) => this.id(n))])].slice(-300);
+    try {
+      localStorage.setItem(this.key(), JSON.stringify(ids));
+    } catch (e) {
+      /* 저장을 못 하면 다음에 다시 새 알림으로 보여요 */
+    }
+  },
+};
+
 function screenNotices() {
   const list = Store.leaderNotices();
+  Notices.markAll(list);
   return `
     ${hud({ back: 'leader', title: '🔔 알림' })}
     <main class="page settings">
@@ -652,7 +683,7 @@ function render() {
   if (State.screen === 'room' && !getSubject(State.subject)) State.screen = 'home';
   if (State.screen === 'friendmade' && !State.madeFriend) State.screen = 'room';
   // 레벨 테스트를 안 했으면 교실보다 테스트가 먼저예요.
-  if (student && ['home', 'room', 'friendmade'].includes(State.screen) && !Store.placementOf()) return Sim.openTest();
+  if (student && ['home', 'room', 'friendmade', 'after'].includes(State.screen) && !Store.placementOf()) return Sim.openTest();
   if (student && !State.grade) State.grade = user.grade;
 
   const views = {
@@ -664,6 +695,7 @@ function render() {
     talk: screenTalk,
     quiz: screenQuiz,
     friendmade: screenFriendMade,
+    after: screenAfter,
     loading: screenLoading,
     intro: screenIntro,
     settings: screenSettings,
@@ -684,6 +716,8 @@ function render() {
   afterQuizRender();
   talkAfterRender();
   introAfterRender();
+  if (State.screen === 'after') AfterSchool.start();
+  else AfterSchool.stop();
   if (State.screen === 'home') {
     const c = document.getElementById('corridor');
     if (c && State.corridorX) c.scrollLeft = State.corridorX;

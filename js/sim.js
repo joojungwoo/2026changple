@@ -18,6 +18,9 @@
  * ========================================================================= */
 
 const TEST_KEY = '__test';
+/** 자율 복습(방과후교실): 소단원마다 문제 수 · 한 번에 최대 문제 수 */
+const FREE_PER_SUB = 3;
+const FREE_MAX = 10;
 const TEST_COUNT = 10;
 
 /** 과목마다 있는 학습 수준 (학년 · 학기) — 쉬운 것부터 */
@@ -55,14 +58,18 @@ const Sim = {
   /* ------------------------------ 시작 ------------------------------ */
   /** 단원 시작 (이어하기가 있으면 그 자리부터) */
   open(chapterId, kind, reunionLine) {
-    const saved = Store.sim(chapterId);
+    const key = kind === 'free' ? `free:${chapterId}` : chapterId;
+    const saved = Store.sim(key);
     if (saved && saved.kind === kind) {
       this.s = saved;
-      return this.show();
+      this.show();
+      // 하던 이야기로 돌아오면 친구가 반갑게 맞아 줘요. (나갈 때 쉬는 시간 인사와 같은 모양)
+      if (['talk', 'quiz'].includes(State.screen)) setSheet({ kind: 'welcome', line: pickOne(WELCOME_BACK_LINES) });
+      return;
     }
     const friendId = Store.castFriend(chapterId);
     this.s = {
-      key: chapterId,
+      key,
       kind,
       chapterId,
       friendId,
@@ -80,7 +87,7 @@ const Sim = {
       at: Date.now(),
     };
     if (kind === 'learn') this._learnIntro();
-    else this._reviewIntro(reunionLine);
+    else this._reviewIntro(reunionLine, kind === 'free');
     this.save();
     this.show();
   },
@@ -96,12 +103,12 @@ const Sim = {
     const qs = this._testQuestions(user.grade);
     this.s = { key: TEST_KEY, kind: 'test', friendId: 'jia', sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], grade: user.grade, at: Date.now() };
     const q = this.s.queue;
-    q.push({ t: 'narr', text: '(새 학교에 온 첫날. 누군가 반갑게 손을 흔들어요.)' });
-    q.push({ t: 'say', text: '안녕! 나는 지아야. 우리 학교에 온 걸 환영해!', mood: 'happy' });
-    q.push({ t: 'say', text: '교실에 가기 전에 문제 몇 개만 같이 풀어 볼래?\n틀려도 괜찮아. 아는 만큼만 하면 돼!' });
-    qs.forEach((x) => q.push({ t: 'problem', qid: x.id, test: true }));
-    q.push({ t: 'say', text: '끝까지 해냈다! 정말 열심히 했어.', mood: 'happy' });
-    q.push({ t: 'say', text: '이제 교실로 가 보자. 새 친구들이 기다리고 있어!', mood: 'happy' });
+    q.push(...this._compile(TEST_STORY.intro));
+    qs.forEach((x, i) => {
+      q.push({ t: 'problem', qid: x.id, test: true });
+      if (TEST_STORY.between[i + 1] && i + 1 < qs.length) q.push(...this._compile(TEST_STORY.between[i + 1]));
+    });
+    q.push(...this._compile(TEST_STORY.outro));
     q.push({ t: 'end' });
     this.save();
     this.show();
@@ -156,7 +163,8 @@ const Sim = {
   /* ------------------------------ 장면 만들기 ------------------------------ */
   ctx() {
     const u = Store.currentUser();
-    return { student: (u && (u.nick || u.name)) || '친구', friend: this.friend() };
+    const ch = this.chapter();
+    return { student: (u && (u.nick || u.name)) || '친구', friend: this.friend(), flags: ch ? Store.story(ch.subject).flags : {} };
   },
   friend() {
     return friendById(this.s ? this.s.friendId : 'jia');
@@ -166,6 +174,32 @@ const Sim = {
   },
   scenario() {
     return scenarioFor(this.chapter());
+  },
+  /** 확정 시나리오가 있는 단원이면 그 이야기 */
+  story() {
+    return this.s && STORIES[this.s.chapterId];
+  },
+  flags() {
+    const ch = this.chapter();
+    return ch ? Store.story(ch.subject).flags : {};
+  },
+
+  /**
+   * 이야기 장면 → 장면 줄 (story.js의 쓰는 법)
+   *  조건 · 학습 자리 · 엔딩은 그 자리에 왔을 때 정해요. (앞에서 고른 선택이 반영되게)
+   */
+  _compile(list, who) {
+    const out = [];
+    (list || []).forEach((x) => {
+      if (typeof x === 'string') out.push(/^\(.*\)$/s.test(x) ? { t: 'narr', text: x } : { t: 'say', text: x, who });
+      else if (Array.isArray(x)) out.push(/^\(.*\)$/s.test(x[1]) ? { t: 'narr', text: x[1], who: x[0], mood: x[2] } : { t: 'say', who: x[0], text: x[1], mood: x[2] });
+      else if (x.if !== undefined) out.push({ t: 'if', cond: x.if, then: x.then || [], else: x.else || [] });
+      else if (x.choice) out.push({ t: 'choice', key: x.choice, theme: x.theme || 'together', who: x.who, say: x.say, options: x.options });
+      else if (x.learn !== undefined) out.push({ t: 'slot', ci: x.learn });
+      else if (x.revisit) out.push({ t: 'revisit' });
+      else if (x.ending) out.push({ t: 'ending', subject: x.ending });
+    });
+    return out;
   },
 
   _lines(list, mood) {
@@ -184,6 +218,12 @@ const Sim = {
   },
 
   _learnIntro() {
+    const st = this.story();
+    if (st) {
+      this.s.script = true;
+      this.s.queue.push(...this._compile(st.scenes), { t: 'end' });
+      return;
+    }
     const sc = this.scenario();
     const q = this.s.queue;
     q.push(...this._lines(sc.intro));
@@ -191,22 +231,27 @@ const Sim = {
     q.push({ t: 'gen' });
   },
 
-  _reviewIntro(line) {
+  _reviewIntro(line, free) {
+    const st = this.story();
     const sc = this.scenario();
     const data = Store.getData();
     const q = this.s.queue;
     const scores = Mastery.chapterScores(data, this.s.chapterId);
     this.s.before = Math.round(mean(scores.map((x) => x.M)));
-    // 개념마다 문제 수: 숙달 · 신뢰도가 모두 높으면 확인 문제 하나, 아니면 재설명 + 두 문제
+    // 개념마다 문제 수
+    //  복습(느낌표): 숙달 · 신뢰도가 모두 높으면 확인 문제 하나, 아니면 재설명 + 두 문제
+    //  자율 복습(방과후교실): 소단원마다 3문제, 모두 합쳐 10문제까지
     scores.forEach((x, i) => {
       const good = Mastery.done(x);
-      this.s.target[i] = good ? 1 : 2;
+      this.s.target[i] = free ? FREE_PER_SUB : good ? 1 : 2;
       if (!good && x.M < MASTERY_RULES.passM) this.s.remediated[i] = 'need';
     });
+    if (free) this.s.cap = FREE_MAX;
     q.push({ t: 'narr', text: `(${josa(this.friend().name, '이', '가')} 반갑게 다가와요.)` });
     q.push({ t: 'say', text: line || pickOne(REUNION_LINES), mood: 'happy' });
-    q.push(...this._lines(sc.reunion));
-    q.push(this._social(sc.theme, 1));
+    if (st) q.push({ t: 'say', text: pickOne(st.reunion) });
+    else q.push(...this._lines(sc.reunion));
+    if (!free) q.push(this._social(sc.theme, 1));
     q.push({ t: 'gen' });
   },
 
@@ -270,10 +315,11 @@ const Sim = {
         problem(ci, action);
         break;
       }
-    } else if (s.kind === 'review') {
+    } else if (s.kind === 'review' || s.kind === 'free') {
+      const total = Object.values(s.count).reduce((a, b) => a + b, 0);
       for (let guard = 0; guard < 10; guard++) {
-        if (s.ci >= ch.subunits.length) {
-          add.push({ t: 'say', text: '오늘도 같이 해서 정말 재밌었어!', mood: 'happy' }, { t: 'say', text: '다음에 또 놀자! 약속!', mood: 'happy' }, { t: 'end' });
+        if (s.ci >= ch.subunits.length || (s.cap && total >= s.cap)) {
+          add.push({ t: 'say', text: pickOne(['오늘도 같이 해서 정말 재밌었어!', '너랑 하니까 시간 가는 줄 몰랐어!', '와, 우리 오늘 엄청 많이 했다!']), mood: 'happy' }, { t: 'say', text: pickOne(['다음에 또 놀자! 약속!', '{부름}, 또 놀러 와!', '내일도 기다릴게!']), mood: 'happy' }, { t: 'end' });
           break;
         }
         const ci = s.ci;
@@ -308,12 +354,83 @@ const Sim = {
     const s = this.s;
     if (!s) return go('home');
     s.qi += 1;
-    while (this.node() && this.node().t === 'gen') {
-      this._plan();
-      s.qi += 1;
-    }
+    for (let guard = 0; guard < 200 && this.node() && this._control(this.node()); guard++) s.qi += 1;
     this.save();
     this.show();
+  },
+
+  /** 화면 없이 처리하는 장면 (다음 장면을 정해 줄 뒤에 끼워 넣어요). 처리했으면 true */
+  _control(n) {
+    const s = this.s;
+    const put = (list) => s.queue.splice(s.qi + 1, 0, ...list);
+    if (n.t === 'gen') {
+      this._plan();
+      return true;
+    }
+    if (n.t === 'if') {
+      put(this._compile(storyCond(n.cond, this.flags()) ? n.then : n.else));
+      return true;
+    }
+    if (n.t === 'slot') {
+      // 소단원 학습 자리: 개념 카드 → 문제 → (숙달될 때까지) 문제
+      s.ci = n.ci;
+      s.started[n.ci] = 1;
+      put([this._card(n.ci), ...this._pickProblem(n.ci, 'start'), { t: 'slotgen', ci: n.ci }]);
+      return true;
+    }
+    if (n.t === 'slotgen' || n.t === 'reslot') {
+      const ci = n.ci;
+      const data = Store.getData();
+      const score = Mastery.score(data, `${s.chapterId}:${ci}`);
+      if (n.t === 'reslot') {
+        s.count[ci] = 0;
+        put([{ t: 'say', text: pickOne(TRANSITION) }, this._card(ci, true), ...this._pickProblem(ci, 'remediate'), { t: 'slotgen', ci, re: 1 }]);
+        return true;
+      }
+      const cap = n.re ? MASTERY_RULES.revisitMax : MASTERY_RULES.perConceptMax;
+      if (Mastery.done(score) || (s.count[ci] || 0) >= cap) {
+        if (Mastery.done(score)) delete s.lowConf[ci];
+        else s.lowConf[ci] = 1; // 너무 길어지지 않게 이야기를 이어 가고, 복습에서 다시 봐요
+        return true;
+      }
+      const action = Mastery.nextAction(score);
+      const lead = [];
+      if (action === 'remediate' && !s.remediated[ci]) {
+        s.remediated[ci] = 1;
+        lead.push({ t: 'say', text: pickOne(REMEDIATE_LINES), mood: 'think' }, this._card(ci, true));
+      } else lead.push({ t: 'say', text: pickOne(TRANSITION) });
+      const prob = this._pickProblem(ci, action);
+      if (!prob.length) return true;
+      put([...lead, ...prob, { t: 'slotgen', ci, re: n.re }]);
+      return true;
+    }
+    if (n.t === 'revisit') {
+      // 친구가 되기 전에: 기준에 못 닿은 소단원만 한 번 더 (이야기 전체를 되풀이하지 않아요)
+      const ch = this.chapter();
+      const data = Store.getData();
+      const weak = ch.subunits.map((_, i) => i).filter((i) => s.started[i] && !Mastery.done(Mastery.score(data, `${ch.id}:${i}`)));
+      if (weak.length && !s.round2) {
+        s.round2 = weak;
+        put([{ t: 'say', text: '친구 되기 전에, 아까 조금 헷갈렸던 거 딱 한 번만 더 같이 해 볼까?', mood: 'think' }, ...weak.map((ci) => ({ t: 'reslot', ci }))]);
+      }
+      return true;
+    }
+    if (n.t === 'ending') {
+      const end = storyEnding(n.subject, this.flags());
+      if (end) {
+        safely(() => Store.setStoryEnding(n.subject, end.id));
+        put([{ t: 'narr', text: `(✨ 엔딩 · ${end.title} ✨)` }, ...this._compile(end.lines)]);
+      }
+      return true;
+    }
+    return false;
+  },
+
+  /** 이 소단원에서 풀 문제 하나 (없으면 빈 줄) */
+  _pickProblem(ci, action) {
+    const s = this.s;
+    const q = Mastery.pick(Store.getData(), `${s.chapterId}:${ci}`, { used: new Set(s.used), action, review: false, seed: (Date.now() % 100000) + s.used.length * 31 });
+    return q ? [{ t: 'problem', qid: q.id, ci, action }] : [];
   },
 
   /** 지금 장면에 맞는 화면으로 */
@@ -321,12 +438,15 @@ const Sim = {
     const n = this.node();
     if (!n) {
       // 줄이 끊겼으면 (예전 저장본 등) 다음 장면을 다시 정해요.
-      if (this.s.kind === 'test') return this.finish();
+      if (this.s.kind === 'test' || this.s.script) return this.finish();
       this.s.queue.push({ t: 'gen' });
       this.s.qi = this.s.queue.length - 2;
       return this.next();
     }
-    if (n.t === 'gen') return this.next();
+    if (['gen', 'if', 'slot', 'slotgen', 'reslot', 'revisit', 'ending'].includes(n.t)) {
+      this.s.qi -= 1;
+      return this.next();
+    }
     if (n.t === 'end') return this.finish();
     if (n.t === 'problem') {
       const q = getQuestion(n.qid);
@@ -342,9 +462,13 @@ const Sim = {
     const n = this.node();
     if (!n || n.t !== 'choice' || n.picked !== undefined) return;
     const opt = n.options[i];
+    if (!opt) return;
     n.picked = i;
     safely(() => Store.recordSocial({ chapterId: this.s.chapterId, key: n.key, theme: n.theme, choice: i, mood: opt.mood, kind: this.s.kind }));
-    const replies = opt.reply.map((text) => ({ t: 'say', text, mood: opt.mood }));
+    const ch = this.chapter();
+    if (opt.set && ch) safely(() => Store.setStoryFlags(ch.subject, opt.set));
+    // 확정 시나리오의 반응은 장면 줄, 예전 사회성 장면은 이 친구의 대사
+    const replies = this._compile(opt.reply, n.who).map((x) => (x.t === 'say' && !x.mood ? { ...x, mood: opt.mood } : x));
     this.s.queue.splice(this.s.qi + 1, 0, ...replies);
     this.next();
   },
@@ -385,7 +509,7 @@ const Sim = {
     } else {
       add.push({ t: 'say', text: pickOne(SHOW_HOW), mood: 'think' });
       add.push({ t: 'say', text: q.solution, mood: 'think', solution: true });
-      add.push({ t: 'say', text: '다음엔 분명히 할 수 있을 거야. 같이 또 해 보자!', mood: 'happy' });
+      add.push({ t: 'say', text: pickOne(AFTER_SHOW), mood: 'happy' });
     }
     s.queue.splice(s.qi + 1, 0, ...add);
     this.next();
@@ -410,6 +534,12 @@ const Sim = {
       this.s = null;
       return go('friendmade', { chapterId: chId, madeFriend: s.friendId });
     }
+    if (s.kind === 'free') {
+      safely(() => Store.saveSim(s.key, null));
+      this.s = null;
+      toast('친구랑 신나게 놀았어요!');
+      return go('after');
+    }
     safely(() => Store.finishReview(chId, s.before));
     safely(() => Store.saveSim(chId, null));
     this.s = null;
@@ -424,6 +554,7 @@ const Sim = {
     this.s = null;
     Speech.stop();
     if (s && s.kind === 'test') return go('home');
-    go('room');
+    if (s && s.kind === 'free') return go('after');
+    go('room', { subject: (CHAPTER_BY_ID[s && s.chapterId] || {}).subject || State.subject });
   },
 };

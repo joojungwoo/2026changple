@@ -1,5 +1,6 @@
 /* =========================================================================
- * settings.js — 설정 (프로필 · 학습 모드)
+ * settings.js — 설정 (학습 모드 · 글자 크기 · 화면)
+ *  - 프로필(별명 · 아바타)과 읽어 주기 속도는 뺐어요. 숫자 · 블록 · 듣기는 문제 화면에서 바로 바꿔요.
  *
  *  - 홈 화면의 ⚙️ 버튼을 누르면 바로 열려요. 학생도 스스로 바꿀 수 있어요.
  *  - 바꾸면 바로 저장하고 바로 반영돼요. (Profile.set → Store.setProfile)
@@ -39,16 +40,6 @@ function screenSettings() {
     ${hud({ back: 'home', title: '⚙️ 설정' })}
     <main class="page settings">
       <section class="set-block">
-        <h3>프로필</h3>
-        <label class="set-field">별명
-          <input id="pf-nick" maxlength="10" value="${esc(pf.nick)}" placeholder="${esc(user.name)}" />
-        </label>
-        <div class="avatars" role="radiogroup" aria-label="아바타">
-          ${PROFILE_AVATARS.map((a) => `<button type="button" role="radio" aria-checked="${a === pf.avatar}" class="avatar ${a === pf.avatar ? 'on' : ''}" data-pf="avatar" data-val="${a}" aria-label="아바타 ${a}">${a}</button>`).join('')}
-        </div>
-      </section>
-
-      <section class="set-block">
         <h3>학습 모드</h3>
         <div class="mode-cards" role="radiogroup" aria-label="학습 모드">
           ${Object.entries(MODES)
@@ -62,9 +53,7 @@ function screenSettings() {
         </div>
       </section>
 
-      ${settingGroup('rep', '기본으로 보는 방법', '문제를 풀다가 카드 아래 버튼으로 바꿔 볼 수도 있어요.')}
       ${settingGroup('font', '글자 크기')}
-      ${settingGroup('ttsRate', '읽어 주기 속도', '', '<button type="button" class="btn btn-block set-try" data-tts-try>🔊 들어 보기</button>')}
       ${settingGroup('layout', '화면 배치', '자동은 iPad를 돌리는 방향을 따라가요. 가로면 문제와 풀이가 나란히 보여요.')}
       ${settingGroup('anim', '움직이는 효과', '문제를 푸는 동안에는 늘 꺼져 있어요. 기기에서 "동작 줄이기"를 켜도 꺼져요.')}
       ${pf.anim === 'off' ? '' : settingGroup('animTheme', '쓸어넘기기 효과', '화면을 손가락으로 쓸면 반응해요. 이 화면에서 바로 쓸어 보세요.')}
