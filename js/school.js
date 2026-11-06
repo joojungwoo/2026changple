@@ -43,11 +43,17 @@ const backBtn = (attrs) => roundBtn(attrs, sImg(`${SCH}arrow-left.png`, 's-round
 const restBtn = () => `<button type="button" class="s-rest" data-s-rest>잠깐 쉬는 시간!</button>`;
 
 /* ============================== 진행 상황 ============================== */
+/** 하던 이야기 (예전 버전으로 저장된 것은 새로 시작하니까 '이어서'로 보지 않아요) */
+function freshSim(key) {
+  const x = Store.sim(key);
+  return x && x.v === SIM_VER ? x : null;
+}
+
 const School = {
   /** 이 과목의 교실에 앉는 단원들 (이미 친구가 된 예전 단원 + 지금 학습 수준의 단원) */
   roomList(subject) {
     const place = Store.placementOf();
-    const lv = place ? place[subject] : { grade: 1, term: 1 };
+    const lv = place ? place[subject] : firstLevelOf(subject, 1);
     const data = Store.getData();
     const friends = data.friends || {};
     const cur = levelChapters(subject, lv);
@@ -61,7 +67,7 @@ const School = {
       if (f) state = f.next && f.next <= today ? 'review' : 'done';
       else if (!currentGiven && curIds.has(ch.id)) (state = 'current'), (currentGiven = true);
       else state = 'locked';
-      return { ch, state, friend: f ? friendById(chapterFriendId(ch.id, f.friendId)) : null, sim: Store.sim(ch.id) };
+      return { ch, state, friend: f ? friendById(chapterFriendId(ch.id, f.friendId)) : null, sim: freshSim(ch.id) };
     });
     const allDone = cur.length > 0 && cur.every((c) => friends[c.id]);
     return { lv, seats, allDone, next: allDone ? nextLevel(subject, lv) : null };
@@ -166,9 +172,12 @@ function reunionSheet() {
 }
 
 /* ============================== 대화 ============================== */
+/** 대화 배경 (assets/school/bg/) — 이야기에서 { bg: '…' }로 바꿔요. */
+const TALK_BGS = ['classroom', 'playground', 'library', 'school'];
+
 function portraitHtml(f, mood) {
   const look = friendLook(f);
-  if (look.portrait) return sImg(mood === 'happy' && look.happy ? look.happy : look.portrait, 'talk-portrait big');
+  if (look.portrait) return sImg(look.portrait, `talk-portrait big mood-${mood || 'normal'}`);
   return `<img src="${look.sprite}" class="talk-portrait sprite mood-${mood || 'normal'}" alt="" aria-hidden="true" draggable="false"${look.tint ? ` style="filter:${look.tint}"` : ''}>`;
 }
 
@@ -185,7 +194,8 @@ function screenTalk() {
   const showPerson = n.t !== 'card' && (!narr || n.who || (n.t === 'choice' && !/^\(.*\)$/s.test(text.trim())));
   let over = '';
   if (n.t === 'card') {
-    over = `<section class="talk-card">
+    over = `<button type="button" class="s-speaker card-speaker" data-read-talk aria-label="설명 읽어 주기">${sImg(`${SCH}btn-speaker.png`)}</button>
+    <section class="talk-card">
       <div class="talk-card-ico" aria-hidden="true">${esc(n.icon)}</div>
       <h2>${esc(n.title)}</h2>
       <p data-read>${nl(n.text)}</p>
@@ -199,16 +209,18 @@ function screenTalk() {
     </div>`;
   }
   const mood = n.mood || (n.t === 'choice' ? null : null);
-  return `<div class="s-bg bg-class" aria-hidden="true"></div>
+  const bg = TALK_BGS.includes(s.bg) ? s.bg : 'classroom';
+  return `<div class="s-bg bg-${bg}" aria-hidden="true"></div>
     <div class="sst-wrap"><div class="sst talk">
       ${backBtn('data-s-leave')}
       ${restBtn()}
-      ${n.t === 'card' ? '' : `<div class="talk-person ${showPerson ? '' : 'away'}">${portraitHtml(f, mood)}</div>`}
+      ${n.t === 'card' ? '' : `<div class="talk-person ${showPerson ? '' : 'away'} ${n.t === 'choice' ? 'choosing' : ''}">${portraitHtml(f, mood)}</div>`}
       ${over}
       ${choices}
       <section class="talk-box ${narr ? 'narr' : ''}" ${n.t === 'choice' ? '' : 'data-s-next'}>
         <span class="talk-name">${narr ? '' : esc(f.name)}</span>
         <p class="talk-text" data-read>${nl(text)}</p>
+        ${Sim.canBack() ? '<button type="button" class="talk-prev" data-s-prev aria-label="앞 대사 다시 보기"></button>' : ''}
         ${n.t === 'choice' ? '' : '<span class="talk-arrow" aria-hidden="true"></span>'}
       </section>
       ${n.t === 'choice' ? '' : '<button type="button" class="sr-only" data-s-next>다음</button>'}
@@ -258,6 +270,11 @@ function talkAfterRender() {
   if (State.talkRead === key) return;
   State.talkRead = key;
   if (!Profile.mode().autoRead || State.sheet) return;
+  readTalk();
+}
+
+/** 지금 대사(개념 카드 · 선택지 포함)를 친구 목소리로 읽어요. */
+function readTalk() {
   const n = Sim.node();
   const parts = [];
   const main = Sim.friend();
@@ -381,7 +398,6 @@ function screenQuiz() {
         ${bubble}
       </section>
       <div class="q-tools">
-        ${repSwitch(p, rep)}
         ${hintAllowed && !q.checked ? `<button type="button" class="s-chip ${q.hintLv ? 'on' : ''}" data-s-hint ${q.hintLv >= 2 ? 'disabled' : ''}>힌트${q.hintLv ? ` ${q.hintLv}` : ''}</button>` : ''}
       </div>
       <div class="q-work quiz-work">
@@ -509,11 +525,11 @@ function screenFriendMade() {
   const f = friendById(State.madeFriend);
   const ch = CHAPTER_BY_ID[State.chapterId];
   const look = friendLook(f);
-  return `<div class="s-bg bg-class" aria-hidden="true"></div>
+  return `<div class="s-bg bg-classroom" aria-hidden="true"></div>
     <div class="sst-wrap"><div class="sst made">
       <div class="made-rays" aria-hidden="true"></div>
       ${sImg(`${SCH}sparkle.png`, 'made-sparkle')}
-      ${look.portrait ? sImg(look.happy || look.portrait, 'made-face big') : faceImg(f, 'made-face sprite')}
+      ${look.portrait ? sImg(look.portrait, 'made-face big') : faceImg(f, 'made-face sprite')}
       <h1 class="made-title"><span>${esc(josa(f.name, '과', '와'))}</span><span>친구가 됐어!</span></h1>
       <p class="made-sub">${esc(josa(f.name, '은', '는'))} 이제 교실 자리에 앉아 있어요. 방과후교실에서도 만날 수 있어요!${ch ? `<br><small>${esc(ch.title)}</small>` : ''}</p>
       <button type="button" class="s-submit made-btn" data-go="room">교실로 가기</button>
@@ -526,7 +542,8 @@ function screenFriendMade() {
   root.addEventListener('click', (ev) => {
     const el = ev.target.closest(
       '[data-s-room],[data-s-cor-next],[data-s-seat],[data-s-review],[data-s-next-room],[data-s-next],[data-s-choice],' +
-        '[data-s-leave],[data-s-rest],[data-s-resume],[data-s-pick],[data-s-rep],[data-s-hint],[data-s-after],[data-submit],[data-read-problem]'
+        '[data-s-leave],[data-s-rest],[data-s-resume],[data-s-pick],[data-s-rep],[data-s-hint],[data-s-after],[data-submit],[data-read-problem],' +
+        '[data-s-prev],[data-read-talk]'
     );
     if (!el) return;
     const d = el.dataset;
@@ -581,6 +598,15 @@ function screenFriendMade() {
       if (State.sheet) return;
       Speech.stop();
       return Sim.next();
+    }
+    if (el.hasAttribute('data-s-prev')) {
+      if (State.sheet) return;
+      Speech.stop();
+      return Sim.back();
+    }
+    if (el.hasAttribute('data-read-talk')) {
+      if (!Speech.ok) return toast('이 기기에서는 읽어 주기를 쓸 수 없어요.', 'error');
+      return readTalk();
     }
     if (d.sChoice !== undefined) return Sim.choose(Number(d.sChoice));
     if (el.hasAttribute('data-s-leave')) {

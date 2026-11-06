@@ -24,13 +24,26 @@ const FREE_MAX = 10;
 const TEST_COUNT = 10;
 
 /** 과목마다 있는 학습 수준 (학년 · 학기) — 쉬운 것부터 */
+/**
+ * 학습 순서. 국어 1학년은 확정 시나리오(도윤 → 하린 → 수아 → 민준)가 있는 2학기 단원을 먼저 하고,
+ * 그다음 한글 기초(1학기 단원)를 해요. (이야기가 있는 단원으로 시작하게)
+ */
+const STORY_FIRST = { korean: { 1: 2 } };
+function levelOrder(subject, lv) {
+  const first = STORY_FIRST[subject] && STORY_FIRST[subject][lv.grade];
+  return lv.grade * 10 + (first ? (lv.term === first ? 0 : lv.term) : lv.term);
+}
 function levelsOf(subject) {
   const seen = new Map();
   CHAPTERS.filter((c) => c.subject === subject).forEach((c) => {
     const k = `${c.grade}-${c.term || 1}`;
     if (!seen.has(k)) seen.set(k, { grade: c.grade, term: c.term || 1 });
   });
-  return [...seen.values()].sort((a, b) => a.grade - b.grade || a.term - b.term);
+  return [...seen.values()].sort((a, b) => levelOrder(subject, a) - levelOrder(subject, b));
+}
+/** 이 학년에서 처음 배우는 학기 */
+function firstLevelOf(subject, grade) {
+  return levelsOf(subject).find((x) => x.grade === grade) || { grade, term: 1 };
 }
 function levelChapters(subject, lv) {
   return CHAPTERS.filter((c) => c.subject === subject && c.grade === lv.grade && (c.term || 1) === lv.term);
@@ -52,6 +65,9 @@ function currentTerm() {
 
 const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
 
+/** 이야기 저장본 버전: 시나리오가 바뀌면 올려요. 다른 버전으로 저장된 하던 이야기는 새로 시작해요. */
+const SIM_VER = 3;
+
 const Sim = {
   s: null, // 지금 시뮬레이션
 
@@ -59,7 +75,12 @@ const Sim = {
   /** 단원 시작 (이어하기가 있으면 그 자리부터) */
   open(chapterId, kind, reunionLine) {
     const key = kind === 'free' ? `free:${chapterId}` : chapterId;
-    const saved = Store.sim(key);
+    let saved = Store.sim(key);
+    // 예전 버전에서 하던 이야기(예전 친구 · 예전 대사)는 버리고 확정 시나리오로 새로 시작해요.
+    if (saved && (saved.v !== SIM_VER || (STORY_CAST[chapterId] && saved.friendId !== STORY_CAST[chapterId]))) {
+      safely(() => Store.saveSim(key, null));
+      saved = null;
+    }
     if (saved && saved.kind === kind) {
       this.s = saved;
       this.show();
@@ -69,6 +90,7 @@ const Sim = {
     }
     const friendId = Store.castFriend(chapterId);
     this.s = {
+      v: SIM_VER,
       key,
       kind,
       chapterId,
@@ -94,14 +116,18 @@ const Sim = {
 
   /** 레벨 테스트 시작 */
   openTest() {
-    const saved = Store.sim(TEST_KEY);
+    let saved = Store.sim(TEST_KEY);
+    if (saved && saved.v !== SIM_VER) {
+      safely(() => Store.saveSim(TEST_KEY, null));
+      saved = null;
+    }
     if (saved) {
       this.s = saved;
       return this.show();
     }
     const user = Store.currentUser();
     const qs = this._testQuestions(user.grade);
-    this.s = { key: TEST_KEY, kind: 'test', friendId: 'jia', sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], grade: user.grade, at: Date.now() };
+    this.s = { v: SIM_VER, key: TEST_KEY, kind: 'test', friendId: 'jia', sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], grade: user.grade, at: Date.now() };
     const q = this.s.queue;
     q.push(...this._compile(TEST_STORY.intro));
     qs.forEach((x, i) => {
@@ -148,11 +174,13 @@ const Sim = {
       let lv = null;
       for (let g = 1; g <= G && !lv; g++) {
         const at = rs.filter((r) => r.grade === g);
-        if (at.length && at.filter((r) => r.correct).length / at.length < 0.6) lv = { grade: g, term: 1 };
+        if (at.length && at.filter((r) => r.correct).length / at.length < 0.6) lv = firstLevelOf(subj, g);
       }
       if (!lv) {
         const t = currentTerm();
         lv = { grade: G, term: levelChapters(subj, { grade: G, term: t }).length ? t : 1 };
+        // 1학년 국어는 학기와 상관없이 이야기 단원부터
+        if (STORY_FIRST[subj] && STORY_FIRST[subj][G]) lv = firstLevelOf(subj, G);
       }
       if (!levelChapters(subj, lv).length) lv = levelsOf(subj).filter((x) => x.grade <= lv.grade).pop() || levelsOf(subj)[0];
       out[subj] = lv;
@@ -198,6 +226,7 @@ const Sim = {
       else if (x.learn !== undefined) out.push({ t: 'slot', ci: x.learn });
       else if (x.revisit) out.push({ t: 'revisit' });
       else if (x.ending) out.push({ t: 'ending', subject: x.ending });
+      else if (x.bg) out.push({ t: 'bg', bg: x.bg });
     });
     return out;
   },
@@ -353,15 +382,42 @@ const Sim = {
   next() {
     const s = this.s;
     if (!s) return go('home');
+    // 되돌아가기(◀)용: 대사 · 개념 카드만 쌓고, 문제나 선택을 지나면 비워요.
+    const cur = this.node();
+    if (cur && ['say', 'narr', 'card'].includes(cur.t)) (s.back = s.back || []).push(s.qi);
+    else s.back = [];
     s.qi += 1;
     for (let guard = 0; guard < 200 && this.node() && this._control(this.node()); guard++) s.qi += 1;
     this.save();
     this.show();
   },
 
-  /** 화면 없이 처리하는 장면 (다음 장면을 정해 줄 뒤에 끼워 넣어요). 처리했으면 true */
-  _control(n) {
+  /** 앞 대사로 되돌아가기 (◀ 버튼) */
+  back() {
     const s = this.s;
+    if (!s || !s.back || !s.back.length) return;
+    s.qi = s.back.pop();
+    this.save();
+    this.show();
+  },
+  canBack() {
+    return !!(this.s && this.s.back && this.s.back.length);
+  },
+
+  /** 화면 없이 처리하는 장면. 한 번 처리한 장면은 되돌아갔다 다시 와도 또 처리하지 않아요. */
+  _control(n) {
+    if (n.done) return true;
+    const r = this._control1(n);
+    if (r) n.done = true;
+    return r;
+  },
+
+  _control1(n) {
+    const s = this.s;
+    if (n.t === 'bg') {
+      s.bg = n.bg;
+      return true;
+    }
     const put = (list) => s.queue.splice(s.qi + 1, 0, ...list);
     if (n.t === 'gen') {
       this._plan();
@@ -443,9 +499,10 @@ const Sim = {
       this.s.qi = this.s.queue.length - 2;
       return this.next();
     }
-    if (['gen', 'if', 'slot', 'slotgen', 'reslot', 'revisit', 'ending'].includes(n.t)) {
-      this.s.qi -= 1;
-      return this.next();
+    if (['gen', 'if', 'slot', 'slotgen', 'reslot', 'revisit', 'ending', 'bg'].includes(n.t)) {
+      for (let guard = 0; guard < 200 && this.node() && this._control(this.node()); guard++) this.s.qi += 1;
+      this.save();
+      return this.show();
     }
     if (n.t === 'end') return this.finish();
     if (n.t === 'problem') {
