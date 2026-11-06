@@ -291,7 +291,7 @@ function quizParts() {
   const q = State.quiz;
   const item = q.questions[q.index];
   const p = Problem.from(item);
-  const rep = pickRep(p, q.rep || State.repPref || 'numbers'); // 문제 화면에서 고른 보기 방법을 다음 문제에도 이어 써요
+  const rep = pickRep(p, 'numbers'); // 보기 방법 버튼은 없앴어요 (그림이 필요한 문제는 시각화형 문제가 따로 있어요)
   // 펜슬 모드: 손글씨 → (안 되면) 숫자패드 → 색 카드
   const input = pickInput(p, Profile.mode().input);
   return { q, item, p, rep, input };

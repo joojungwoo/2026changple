@@ -813,7 +813,13 @@ const Store = {
     SUBJECTS.forEach(({ id: subj }) => {
       const a = own && own[subj];
       const b = lead && lead[subj];
-      out[subj] = (b && (!a || (b.at || 0) >= (a.at || 0)) ? { ...b, source: 'leader' } : a) || { grade: 1, term: 1, at: 0, source: 'default' };
+      out[subj] = (b && (!a || (b.at || 0) >= (a.at || 0)) ? { ...b, source: 'leader' } : a) || { ...firstLevelOf(subj, 1), at: 0, source: 'default' };
+      // 예전 레벨 테스트로 1학년 국어 1학기(한글 기초)에 배치됐지만 아직 시작 전이면, 이야기 단원(2학기)부터 해요.
+      const o = out[subj];
+      if (o.source === 'test' && STORY_FIRST[subj] && STORY_FIRST[subj][o.grade] && o.term !== STORY_FIRST[subj][o.grade]) {
+        const started = levelChapters(subj, o).some((c) => (data.friends || {})[c.id] || (data.sims || {})[c.id]);
+        if (!started) out[subj] = { ...o, term: STORY_FIRST[subj][o.grade] };
+      }
     });
     return out;
   },

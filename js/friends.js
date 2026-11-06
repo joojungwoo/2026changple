@@ -12,38 +12,44 @@
 
 /** 친구 생김새: 작은 그림(교실 자리 · 문제 화면) + 큰 그림(대화). 큰 그림이 없으면 작은 그림을 크게 써요.
  *  tint: 같은 그림을 쓰는 친구를 구별하려고 색을 살짝 바꿔요. */
+/** 친구 그림: 큰 그림(640px, 대화 화면) · 작은 그림(-s, 200px, 자리 · 팝업 · 문제 화면) */
+const CHR = 'assets/school/chars/';
 const FRIEND_LOOKS = {
-  jia: { sprite: 'assets/school/girl.png', portrait: 'assets/school/jia.png', happy: 'assets/school/jia-happy.png' },
-  boy: { sprite: 'assets/school/boy.png' },
-  'girl-brown': { sprite: 'assets/school/girl-brown.png' },
-  'boy-black': { sprite: 'assets/school/boy-black.png' },
-  'girl-auburn': { sprite: 'assets/school/girl-auburn.png' },
-  'boy-blond': { sprite: 'assets/school/boy-blond.png' },
-  'girl-light': { sprite: 'assets/school/girl-light.png' },
-  'boy-ash': { sprite: 'assets/school/boy-ash.png' },
-  'girl-rose': { sprite: 'assets/school/girl-light.png', tint: 'hue-rotate(-35deg) saturate(1.15)' },
+  jia: { sprite: `${CHR}jia-s.png`, portrait: `${CHR}jia.png` },
+  taeo: { sprite: `${CHR}taeo-s.png`, portrait: `${CHR}taeo.png` },
+  yerin: { sprite: `${CHR}yerin-s.png`, portrait: `${CHR}yerin.png` },
+  hyunwoo: { sprite: `${CHR}hyunwoo-s.png`, portrait: `${CHR}hyunwoo.png` },
+  soyul: { sprite: `${CHR}soyul-s.png`, portrait: `${CHR}soyul.png` },
+  doyun: { sprite: `${CHR}doyun-s.png`, portrait: `${CHR}doyun.png` },
+  harin: { sprite: `${CHR}harin-s.png`, portrait: `${CHR}harin.png` },
+  sua: { sprite: `${CHR}sua-s.png`, portrait: `${CHR}sua.png` },
+  minjun: { sprite: `${CHR}minjun-s.png`, portrait: `${CHR}minjun.png` },
+  dain: { sprite: `${CHR}dain-s.png`, portrait: `${CHR}dain.png` },
 };
+const FEMALE_LOOKS = new Set(['jia', 'yerin', 'soyul', 'harin', 'sua', 'dain']);
+/** 확정 시나리오가 없는 단원의 친구가 돌려 쓰는 모습 (다인 모습을 먼저) */
+const EXTRA_LOOKS = ['dain', 'yerin', 'doyun', 'sua', 'taeo', 'harin', 'minjun', 'soyul', 'hyunwoo', 'jia'];
 
 /**
  * 친구들 — 확정 시나리오(story.js)의 아홉 친구. 과목마다 따로예요.
  *  수학: 지아 → 태오 → 예린 → 현우 → 소율 / 국어: 도윤 → 하린 → 수아 → 민준
- *  hello: 처음 만날 때 · like: 좋아하는 것 · voice: 읽어 주기 목소리(Typecast 성우 이름)
+ *  hello: 처음 만날 때 · like: 좋아하는 것 · voice: 읽어 주기 목소리 (기기 음성 · 남/여 · 높이 · 빠르기, js/speech.js)
  */
 const FRIEND_CAST = [
-  { id: 'jia', subject: 'math', name: '지아', look: 'jia', persona: '꼼꼼한 계획쟁이, 가끔 걱정이 많아요', hello: '안녕! 나는 지아야. 우리 짝꿍 하자!', like: '계획표 만들기', voice: '하율' },
-  { id: 'taeo', subject: 'math', name: '태오', look: 'boy-ash', persona: '장난꾸러기지만 마음이 따뜻해요', hello: '헤헤, 안녕! 나는 태오야. 재밌는 거 하자!', like: '깜짝 놀이', voice: '하준' },
-  { id: 'yerin', subject: 'math', name: '예린', look: 'girl-light', persona: '수줍지만 용기를 내고 싶어요', hello: '안녕… 나는 예린이야.', like: '리본 만들기', voice: '채린' },
-  { id: 'hyunwoo', subject: 'math', name: '현우', look: 'boy-black', persona: '자기 생각을 또렷하게 말해요', hello: '나는 현우야. 할 말 있으면 나한테 해!', like: '무대 꾸미기', voice: '민수' },
-  { id: 'soyul', subject: 'math', name: '소율', look: 'girl-auburn', persona: '조용하고 친구를 잘 챙겨요', hello: '저기… 나는 소율이야.', like: '물건 정리', voice: '류은' },
-  { id: 'doyun', subject: 'korean', name: '도윤', look: 'boy', persona: '밝고 먼저 인사해요', hello: '안녕! 나 도윤이야!', like: '친구랑 놀기', voice: '호빈이' },
-  { id: 'harin', subject: 'korean', name: '하린', look: 'girl-brown', persona: '말수가 적지만 속이 깊어요', hello: '…안녕. 나는 하린이야.', like: '책 읽기', voice: '서윤' },
-  { id: 'sua', subject: 'korean', name: '수아', look: 'girl-rose', persona: '친구를 사귀고 싶어 두근거려요', hello: '안녕! 나는 수아야!', like: '그림일기', voice: '수아' },
-  { id: 'minjun', subject: 'korean', name: '민준', look: 'boy-blond', persona: '궁금한 건 바로 말해요', hello: '나는 민준이야. 궁금한 거 있어?', like: '탐정 놀이', voice: '민수' },
+  { id: 'jia', subject: 'math', name: '지아', look: 'jia', persona: '꼼꼼한 계획쟁이, 가끔 걱정이 많아요', hello: '안녕! 나는 지아야. 우리 짝꿍 하자!', like: '계획표 만들기', voice: { g: 'f', pitch: 1.45, rate: 1.05 } },
+  { id: 'taeo', subject: 'math', name: '태오', look: 'taeo', persona: '장난꾸러기지만 마음이 따뜻해요', hello: '헤헤, 안녕! 나는 태오야. 재밌는 거 하자!', like: '깜짝 놀이', voice: { g: 'm', pitch: 1.5, rate: 1.12 } },
+  { id: 'yerin', subject: 'math', name: '예린', look: 'yerin', persona: '수줍지만 용기를 내고 싶어요', hello: '안녕… 나는 예린이야.', like: '리본 만들기', voice: { g: 'f', pitch: 1.6, rate: 0.95 } },
+  { id: 'hyunwoo', subject: 'math', name: '현우', look: 'hyunwoo', persona: '자기 생각을 또렷하게 말해요', hello: '나는 현우야. 할 말 있으면 나한테 해!', like: '무대 꾸미기', voice: { g: 'm', pitch: 1.35, rate: 1.05 } },
+  { id: 'soyul', subject: 'math', name: '소율', look: 'soyul', persona: '조용하고 친구를 잘 챙겨요', hello: '저기… 나는 소율이야.', like: '물건 정리', voice: { g: 'f', pitch: 1.55, rate: 0.92 } },
+  { id: 'doyun', subject: 'korean', name: '도윤', look: 'doyun', persona: '밝고 먼저 인사해요', hello: '안녕! 나 도윤이야!', like: '친구랑 놀기', voice: { g: 'm', pitch: 1.45, rate: 1.1 } },
+  { id: 'harin', subject: 'korean', name: '하린', look: 'harin', persona: '말수가 적지만 속이 깊어요', hello: '…안녕. 나는 하린이야.', like: '책 읽기', voice: { g: 'f', pitch: 1.35, rate: 0.95 } },
+  { id: 'sua', subject: 'korean', name: '수아', look: 'sua', persona: '친구를 사귀고 싶어 두근거려요', hello: '안녕! 나는 수아야!', like: '그림일기', voice: { g: 'f', pitch: 1.65, rate: 1.08 } },
+  { id: 'minjun', subject: 'korean', name: '민준', look: 'minjun', persona: '궁금한 건 바로 말해요', hello: '나는 민준이야. 궁금한 거 있어?', like: '탐정 놀이', voice: { g: 'm', pitch: 1.4, rate: 1.0 } },
 ];
 /** 예전 버전에서 만난 친구 (저장된 기록을 읽을 때만) */
 const LEGACY_CAST = {
-  junseo: { name: '준서', look: 'boy-black' }, seoa: { name: '서아', look: 'girl-auburn' },
-  minho: { name: '민호', look: 'boy-blond' }, yuna: { name: '유나', look: 'girl-light' },
+  junseo: { name: '준서', look: 'minjun' }, seoa: { name: '서아', look: 'dain' },
+  minho: { name: '민호', look: 'hyunwoo' }, yuna: { name: '유나', look: 'yerin' },
 };
 /** 확정 시나리오가 없는 단원에서 만나는 친구 이름 (과목마다 따로) */
 const EXTRA_NAMES = {
@@ -318,9 +324,9 @@ function friendById(id) {
   const subject = m[1] === 'k' ? 'korean' : 'math';
   const n = Number(m[2]);
   const names = EXTRA_NAMES[subject];
-  const looks = Object.keys(FRIEND_LOOKS).filter((k) => k !== 'jia');
+  const looks = EXTRA_LOOKS;
   const name = names[n % names.length];
-  return { id, subject, name, look: looks[n % looks.length], hello: `안녕! 나는 ${josa(name, '이야', '야')}. 만나서 반가워!`, like: '노는 거', voice: subject === 'math' ? '하율' : '서윤' };
+  return { id, subject, name, look: looks[n % looks.length], hello: `안녕! 나는 ${josa(name, '이야', '야')}. 만나서 반가워!`, like: '노는 거', voice: { g: FEMALE_LOOKS.has(looks[n % looks.length]) ? 'f' : 'm', pitch: 1.4 + (n % 3) * 0.08, rate: 1 } };
 }
 
 /** 이 단원의 친구: 확정 시나리오 단원은 정해진 친구, 아니면 과목마다 이름을 차례로 붙여요. */
@@ -337,7 +343,7 @@ function chapterFriendId(chapterId, savedId) {
 }
 
 function friendLook(f) {
-  return FRIEND_LOOKS[f.look] || FRIEND_LOOKS.boy;
+  return FRIEND_LOOKS[f.look] || FRIEND_LOOKS.dain;
 }
 
 /** 칭찬 고르기: 노력 · 과정 중심 */

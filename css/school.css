@@ -20,7 +20,10 @@
 
 /* ---------- 배경 · 무대 ---------- */
 .s-bg { position: fixed; inset: 0; z-index: 0; background-position: center; background-size: cover; image-rendering: pixelated; }
-.bg-class { background-image: url('../assets/school/bg-classroom.jpg'); background-color: #d9c39b; }
+.bg-class, .bg-classroom { background-image: url('../assets/school/bg/classroom.jpg'); background-color: #d9c39b; image-rendering: auto; }
+.bg-playground { background-image: url('../assets/school/bg/playground.jpg'); background-color: #e6c88f; image-rendering: auto; }
+.bg-library { background-image: url('../assets/school/bg/library.jpg'); background-color: #d8c3a0; image-rendering: auto; }
+.bg-school { background-image: url('../assets/school/bg/school.jpg'); background-color: #9fd3f0; image-rendering: auto; }
 .bg-check { background-image: url('../assets/school/bg-gingham.jpg'); background-color: #e4f1fb; image-rendering: auto; }
 .sst-wrap { position: relative; z-index: 1; min-height: 100dvh; display: flex; justify-content: center; align-items: center; }
 .sst { position: relative; width: 595px; height: 842px; zoom: var(--su); flex: 0 0 auto; }
@@ -284,3 +287,35 @@ body[data-anim='off'] .school *, body[data-anim='off'] .school *::before { anima
 .talk-card-ico { font-size: 38px; }
 .talk-card h2 { margin: 2px 0 8px; font-size: 25px; }
 .talk-card p { font-size: 17px; line-height: 1.55; }
+
+/* =========================== 3차 수정 =========================== */
+/* 친구 그림: 새 픽셀 그림은 잘게 그려져 있어서 부드럽게 줄여요. */
+.school img.talk-portrait, .school img.seat-person:not(.ghost), .school img.s-sheet-face, .school img.q-friend, .school img.af-sprite, .school img.made-face { image-rendering: auto; }
+.talk-portrait.big { left: 196px; top: 70px; width: 372px; }
+.talk-portrait.big.mood-sad { filter: saturate(.8) brightness(.97); }
+
+/* 대화 상자: 앞 대사로 돌아가기 (◀, 왼쪽 아래) */
+.talk-prev { position: absolute; left: 34px; bottom: 30px; width: 56px; height: 56px; display: grid; place-items: center; z-index: 2; }
+.talk-prev::before { content: ''; width: 0; height: 0; border-right: 21px solid #2b2b2b; border-top: 19px solid transparent; border-bottom: 19px solid transparent; opacity: .75; }
+.talk-prev:hover::before, .talk-prev:focus-visible::before { opacity: 1; }
+.talk-prev:active { transform: translateX(-3px); }
+
+/* 개념 카드 듣기 단추 (카드 오른쪽 위) */
+.card-speaker { left: 500px; top: 70px; right: auto; z-index: 5; }
+
+/* 교실 자리: 새 친구 그림 (책상 뒤에 앉아 있게) */
+.seat-person:not(.ghost) { left: -4px; bottom: 2px; width: 108px; }
+
+/* 교실: "이어서" — 복습 느낌표처럼 통통 튀며 눈에 띄게 */
+.seat-tag { animation: s-tag-bob .8s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes s-tag-bob {
+  0%, 100% { transform: translate(-50%, 0) scale(1); }
+  40% { transform: translate(-50%, -12px) scale(1.06); }
+  60% { transform: translate(-50%, -12px) scale(1.06); }
+}
+
+/* 선택지가 나올 때: 친구 얼굴이 선택지에 가리지 않게 위로 올려요. */
+.talk-person.choosing .talk-portrait.big { left: 168px; top: -66px; width: 300px; }
+
+/* 방과후교실: 도서관 그림을 옅게 깔아요. */
+.af-wrap { background: linear-gradient(rgba(236, 227, 211, .82), rgba(236, 227, 211, .9)), url('../assets/school/bg/library.jpg') center / cover no-repeat fixed; background-color: #ece3d3; }
