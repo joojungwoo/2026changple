@@ -42,7 +42,7 @@ const PUBLIC_SCREENS = ['splash', 'loading', 'intro', 'login', 'signup'];
 /** 피그마 무대(stage.js)로 그리는 화면 */
 const FIGMA_SCREENS = ['splash', 'loading'];
 /** 학교 화면 (school.js) */
-const SCHOOL_SCREENS = ['home', 'room', 'talk', 'quiz', 'friendmade', 'after'];
+const SCHOOL_SCREENS = ['home', 'room', 'talk', 'quiz', 'friendmade', 'after', 'hunt'];
 /** 화면 사이를 오갈 때 펼친 메뉴는 닫아요. */
 /** 지도자 화면 */
 const LEADER_SCREENS = ['leader', 'lstudent', 'report', 'notices', 'inquiry'];
@@ -678,7 +678,7 @@ function render() {
   if (student && LEADER_SCREENS.includes(State.screen)) State.screen = 'home';
   if (['lstudent', 'report'].includes(State.screen) && !Store.myStudent(State.studentId)) State.screen = 'leader';
   if (State.screen === 'settings' && !student) State.screen = user ? homeOf(user) : 'login';
-  if (['talk', 'quiz'].includes(State.screen) && !Sim.s) State.screen = 'home';
+  if (['talk', 'quiz', 'hunt'].includes(State.screen) && !Sim.s) State.screen = 'home';
   if (State.screen === 'quiz' && !State.quiz) State.screen = 'home';
   if (State.screen === 'room' && !getSubject(State.subject)) State.screen = 'home';
   if (State.screen === 'friendmade' && !State.madeFriend) State.screen = 'room';
@@ -693,6 +693,7 @@ function render() {
     home: screenCorridor,
     room: screenRoom,
     talk: screenTalk,
+    hunt: screenHunt,
     quiz: screenQuiz,
     friendmade: screenFriendMade,
     after: screenAfter,
@@ -715,6 +716,7 @@ function render() {
   loadingAfterRender();
   afterQuizRender();
   talkAfterRender();
+  huntAfterRender();
   introAfterRender();
   if (State.screen === 'after') AfterSchool.start();
   else AfterSchool.stop();

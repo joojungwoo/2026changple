@@ -66,7 +66,7 @@ function currentTerm() {
 const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
 
 /** 이야기 저장본 버전: 시나리오가 바뀌면 올려요. 다른 버전으로 저장된 하던 이야기는 새로 시작해요. */
-const SIM_VER = 3;
+const SIM_VER = 4;
 
 const Sim = {
   s: null, // 지금 시뮬레이션
@@ -122,27 +122,22 @@ const Sim = {
       saved = null;
     }
     if (saved) {
-      this.s = saved;
-      return this.show();
+      this.s = saved; // 모은 조각 · 지금 단계 그대로 이어서
+      return go('hunt');
     }
     const user = Store.currentUser();
     const qs = this._testQuestions(user.grade);
-    this.s = { v: SIM_VER, key: TEST_KEY, kind: 'test', friendId: 'jia', sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], grade: user.grade, at: Date.now() };
-    const q = this.s.queue;
-    q.push(...this._compile(TEST_STORY.intro));
-    qs.forEach((x, i) => {
-      q.push({ t: 'problem', qid: x.id, test: true });
-      if (TEST_STORY.between[i + 1] && i + 1 < qs.length) q.push(...this._compile(TEST_STORY.between[i + 1]));
-    });
-    q.push(...this._compile(TEST_STORY.outro));
-    q.push({ t: 'end' });
+    // 안내도 조각 찾기 (js/hunt.js): step = welcome → find → open → (문제) → got → … → map
+    this.s = { v: SIM_VER, key: TEST_KEY, kind: 'test', friendId: null, sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], qids: qs.map((x) => x.id), k: 0, step: 'welcome', grade: user.grade, at: Date.now() };
     this.save();
-    this.show();
+    go('hunt');
   },
 
   /**
    * 레벨 테스트 문제: 지금 학년까지의 내용만 (1학년이면 1학년, 3학년이면 1~3학년)
-   *  과목마다 5문제씩, 교과서 수준(쉬움 · 보통)에서 단원이 겹치지 않게 골라요.
+   *  과목마다 5문제씩, 단원이 겹치지 않게 골라요.
+   *  교과서 문제(MAX_BANK, 변형 · 힌트 없음)가 있는 단원은 그 문제로 내고,
+   *  교과서 문제가 아직 없는 학년 · 단원만 기본 문제(쉬움 · 보통)로 채워요.
    */
   _testQuestions(grade) {
     const G = Math.max(1, Math.min(3, grade || 1));
@@ -151,10 +146,14 @@ const Sim = {
     const bySubj = SUBJECTS.map(({ id: subj }) => {
       const out = [];
       alloc.forEach((n, gi) => {
-        const chs = r.shuffle(CHAPTERS.filter((c) => c.subject === subj && c.grade === gi + 1));
+        const inGrade = CHAPTERS.filter((c) => c.subject === subj && c.grade === gi + 1);
+        const withBook = inGrade.filter((c) => c.questions.some((q) => q.textbook));
+        const chs = r.shuffle(withBook.length ? withBook : inGrade);
         for (let k = 0; out.length < alloc.slice(0, gi + 1).reduce((a, b) => a + b, 0) && k < chs.length * 3; k++) {
           const ch = chs[k % chs.length];
-          const pool = ch.questions.map((q) => getQuestion(q.id)).filter((q) => q && !q.textbook && q.level !== '상' && !out.some((o) => o.id === q.id));
+          const all = ch.questions.map((q) => getQuestion(q.id)).filter((q) => q && !out.some((o) => o.id === q.id));
+          const book = all.filter((q) => q.textbook);
+          const pool = book.length ? book : all.filter((q) => q.level !== '상');
           if (pool.length) out.push(r.pick(pool));
         }
       });
@@ -491,6 +490,7 @@ const Sim = {
 
   /** 지금 장면에 맞는 화면으로 */
   show() {
+    if (this.s && this.s.kind === 'test') return go('hunt');
     const n = this.node();
     if (!n) {
       // 줄이 끊겼으면 (예전 저장본 등) 다음 장면을 다시 정해요.
@@ -505,6 +505,7 @@ const Sim = {
       return this.show();
     }
     if (n.t === 'end') return this.finish();
+    if (this.s.kind === 'test') return go('hunt');
     if (n.t === 'problem') {
       const q = getQuestion(n.qid);
       if (!q) return this.next();
@@ -526,6 +527,12 @@ const Sim = {
     if (opt.set && ch) safely(() => Store.setStoryFlags(ch.subject, opt.set));
     // 확정 시나리오의 반응은 장면 줄, 예전 사회성 장면은 이 친구의 대사
     const replies = this._compile(opt.reply, n.who).map((x) => (x.t === 'say' && !x.mood ? { ...x, mood: opt.mood } : x));
+    // 미숙한 선택(retry): 친구의 반응 → 짧은 도움말 → 같은 상황에서 다시 골라요. (고른 보기는 빼고)
+    if (opt.retry) {
+      if (opt.tip) replies.push({ t: 'narr', text: opt.tip, tip: true });
+      const left = n.options.filter((o, k) => k !== i && !(n.gone || []).includes(k));
+      if (left.length) replies.push({ ...n, picked: undefined, done: undefined, again: true, say: opt.again || n.say, options: n.options, gone: [...(n.gone || []), i] });
+    }
     this.s.queue.splice(this.s.qi + 1, 0, ...replies);
     this.next();
   },
@@ -551,8 +558,8 @@ const Sim = {
     s.used.push(q.id);
 
     if (s.kind === 'test') {
-      s.results.push({ qid: q.id, subject: q.subject, grade: q.grade, correct: r.firstCorrect });
-      return this.next();
+      s.results.push({ qid: q.id, subject: q.subject, grade: q.grade, correct: r.firstCorrect, input: r.input });
+      return Hunt.afterProblem();
     }
     const ci = n.ci !== undefined ? n.ci : q.sub;
     s.count[ci] = (s.count[ci] || 0) + 1;
