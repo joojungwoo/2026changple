@@ -173,7 +173,7 @@ function reunionSheet() {
 
 /* ============================== 대화 ============================== */
 /** 대화 배경 (assets/school/bg/) — 이야기에서 { bg: '…' }로 바꿔요. */
-const TALK_BGS = ['classroom', 'playground', 'library', 'school'];
+const TALK_BGS = ['classroom', 'playground', 'library', 'school', 'gate', 'stairs', 'storage', 'videoroom', 'preproom', 'festival'];
 
 function portraitHtml(f, mood) {
   const look = friendLook(f);
@@ -205,7 +205,7 @@ function screenTalk() {
   let choices = '';
   if (n.t === 'choice') {
     choices = `<div class="talk-choices" role="group" aria-label="어떻게 말할까?">
-      ${n.options.map((o, i) => (o.if && !storyCond(o.if, ctx.flags) ? '' : `<button type="button" class="talk-choice" data-s-choice="${i}">${esc(fillLine(o.text, ctx))}</button>`)).join('')}
+      ${n.options.map((o, i) => ((o.if && !storyCond(o.if, ctx.flags)) || (n.gone || []).includes(i) ? '' : `<button type="button" class="talk-choice" data-s-choice="${i}">${esc(fillLine(o.text, ctx))}</button>`)).join('')}
     </div>`;
   }
   const mood = n.mood || (n.t === 'choice' ? null : null);
@@ -217,8 +217,8 @@ function screenTalk() {
       ${n.t === 'card' ? '' : `<div class="talk-person ${showPerson ? '' : 'away'} ${n.t === 'choice' ? 'choosing' : ''}">${portraitHtml(f, mood)}</div>`}
       ${over}
       ${choices}
-      <section class="talk-box ${narr ? 'narr' : ''}" ${n.t === 'choice' ? '' : 'data-s-next'}>
-        <span class="talk-name">${narr ? '' : esc(f.name)}</span>
+      <section class="talk-box ${narr ? 'narr' : ''} ${n.tip ? 'tip' : ''}" ${n.t === 'choice' ? '' : 'data-s-next'}>
+        <span class="talk-name">${n.tip ? '💡 도움말' : narr ? '' : esc(f.name)}</span>
         <p class="talk-text" data-read>${nl(text)}</p>
         ${Sim.canBack() ? '<button type="button" class="talk-prev" data-s-prev aria-label="앞 대사 다시 보기"></button>' : ''}
         ${n.t === 'choice' ? '' : '<span class="talk-arrow" aria-hidden="true"></span>'}
@@ -373,18 +373,17 @@ function screenQuiz() {
   const showSteps = q.hintLv >= 2 || q.checked;
   const body = REPS[rep === 'listen' ? 'numbers' : rep].render(p, { checked: showSteps });
   let bubble = '';
-  if (q.say) bubble = `<div class="q-say ${q.say.kind || ''}" role="status"><b>${esc(f.name)}</b><span data-read>${shapeColorize(nl(q.say.text))}</span></div>`;
+  // 레벨 테스트에는 친구가 나오지 않아요.
+  if (q.say) bubble = `<div class="q-say ${q.say.kind || ''} ${test ? 'noname' : ''}" role="status">${test ? '' : `<b>${esc(f.name)}</b>`}<span data-read>${shapeColorize(nl(q.say.text))}</span></div>`;
 
   let action;
   if (q.checked && !q.correct && !test) action = `<button type="button" class="s-submit" data-s-after>알겠어!</button>`;
   else if (q.checked) action = `<button type="button" class="s-submit" disabled>${test ? '좋아!' : '맞았어!'}</button>`;
   else action = `<button type="button" class="s-submit" data-submit ${ready ? '' : 'disabled'}>${input === 'pencil' ? '다 썼어요!' : '제출하기'}</button>`;
 
-  const progress = test ? (() => {
-    const all = s.queue.filter((x) => x.t === 'problem');
-    const at = all.indexOf(s.queue[s.qi]);
-    return `<div class="q-dots" aria-label="${all.length}문제 중 ${at + 1}번째">${all.map((_, i) => `<i class="${i < at ? 'done' : i === at ? 'now' : ''}"></i>`).join('')}</div>`;
-  })() : '';
+  const progress = test
+    ? `<div class="q-hunt-head" role="status"><span aria-hidden="true">🗺️</span> 문제를 풀고 안내도 조각을 모아 보자! <b>${(s.k || 0) + 1}/10</b></div>`
+    : '';
 
   return `<div class="s-bg bg-check" aria-hidden="true"></div>
     <div class="sst-wrap"><div class="sst quiz">
@@ -394,7 +393,7 @@ function screenQuiz() {
       <section class="q-card rep-${rep}">
         <button type="button" class="s-speaker" data-read-problem aria-label="문제 읽어 주기">${sImg(`${SCH}btn-speaker.png`)}</button>
         <div class="q-body quiz-problem">${body}</div>
-        ${faceImg(f, 'q-friend')}
+        ${test ? '' : faceImg(f, 'q-friend')}
         ${bubble}
       </section>
       <div class="q-tools">
