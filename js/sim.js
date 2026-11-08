@@ -117,7 +117,8 @@ const Sim = {
   /** 레벨 테스트 시작 */
   openTest() {
     let saved = Store.sim(TEST_KEY);
-    if (saved && saved.v !== SIM_VER) {
+    if (saved && (saved.v !== SIM_VER || saved.hv !== 2)) {
+      // 예전 방식(조각 10개)으로 하던 레벨 테스트는 처음부터
       safely(() => Store.saveSim(TEST_KEY, null));
       saved = null;
     }
@@ -128,39 +129,33 @@ const Sim = {
     const user = Store.currentUser();
     const qs = this._testQuestions(user.grade);
     // 안내도 조각 찾기 (js/hunt.js): step = welcome → find → open → (문제) → got → … → map
-    this.s = { v: SIM_VER, key: TEST_KEY, kind: 'test', friendId: null, sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], qids: qs.map((x) => x.id), k: 0, step: 'welcome', grade: user.grade, at: Date.now() };
+    this.s = { v: SIM_VER, key: TEST_KEY, kind: 'test', friendId: null, sess: `test-${Date.now()}`, queue: [], qi: 0, used: [], results: [], qids: qs.map((x) => x.id), hv: 2, k: 0, j: 0, step: 'welcome', grade: user.grade, at: Date.now() };
     this.save();
     go('hunt');
   },
 
   /**
-   * 레벨 테스트 문제: 지금 학년까지의 내용만 (1학년이면 1학년, 3학년이면 1~3학년)
-   *  과목마다 5문제씩, 단원이 겹치지 않게 골라요.
-   *  교과서 문제(MAX_BANK, 변형 · 힌트 없음)가 있는 단원은 그 문제로 내고,
-   *  교과서 문제가 아직 없는 학년 · 단원만 기본 문제(쉬움 · 보통)로 채워요.
+   * 레벨 테스트 문제: 교과서 문제(MAX_BANK)만 그대로 내요. (시각화형 · 단계분해형 같은 바꾼 문제는 내지 않아요)
+   *  과목마다 5문제씩, 지금 학년까지의 단원에서 단원이 겹치지 않게 골라요.
+   *  교과서 문제가 아직 없는 학년(2 · 3학년)은 있는 학년의 교과서 문제로 내요.
    */
   _testQuestions(grade) {
     const G = Math.max(1, Math.min(3, grade || 1));
-    const alloc = { 1: [5], 2: [2, 3], 3: [1, 2, 2] }[G];
     const r = genRng(Date.now() % 100000);
+    const book = (ch) => ((window.MAX_BANK || {})[ch.id] || []).map((q) => getQuestion(q.id)).filter(Boolean);
     const bySubj = SUBJECTS.map(({ id: subj }) => {
+      let chs = CHAPTERS.filter((c) => c.subject === subj && c.grade <= G && book(c).length);
+      if (!chs.length) chs = CHAPTERS.filter((c) => c.subject === subj && book(c).length);
+      chs = r.shuffle(chs);
       const out = [];
-      alloc.forEach((n, gi) => {
-        const inGrade = CHAPTERS.filter((c) => c.subject === subj && c.grade === gi + 1);
-        const withBook = inGrade.filter((c) => c.questions.some((q) => q.textbook));
-        const chs = r.shuffle(withBook.length ? withBook : inGrade);
-        for (let k = 0; out.length < alloc.slice(0, gi + 1).reduce((a, b) => a + b, 0) && k < chs.length * 3; k++) {
-          const ch = chs[k % chs.length];
-          const all = ch.questions.map((q) => getQuestion(q.id)).filter((q) => q && !out.some((o) => o.id === q.id));
-          const book = all.filter((q) => q.textbook);
-          const pool = book.length ? book : all.filter((q) => q.level !== '상');
-          if (pool.length) out.push(r.pick(pool));
-        }
-      });
+      for (let k = 0; out.length < TEST_COUNT / 2 && k < chs.length * 4; k++) {
+        const pool = book(chs[k % chs.length]).filter((q) => !out.some((o) => o.id === q.id));
+        if (pool.length) out.push(r.pick(pool));
+      }
       return out;
     });
     const mixed = [];
-    for (let i = 0; i < 5; i++) bySubj.forEach((l) => l[i] && mixed.push(l[i]));
+    for (let i = 0; i < TEST_COUNT / 2; i++) bySubj.forEach((l) => l[i] && mixed.push(l[i]));
     return mixed.slice(0, TEST_COUNT);
   },
 

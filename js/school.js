@@ -87,22 +87,23 @@ const School = {
 /* ============================== 복도 (홈) ============================== */
 function screenCorridor() {
   const rec = School.recommend();
+  // 문 그림(assets/school/home.jpg) 순서: 수학 · 국어 · 방과후. 과목 이름은 그림에 적혀 있어요.
   const doors = SUBJECT_ORDER.map((id, i) => {
     const subj = getSubject(id);
     const room = School.roomList(id);
     const due = room.seats.filter((t) => t.state === 'review').length;
-    return `<div class="cor-tile" style="--i:${i}">
+    return `<div class="cor-tile t${i}">
       <button type="button" class="cor-door" data-s-room="${id}" aria-label="${subj.name} 교실로 들어가기${due ? ` (기다리는 친구 ${due}명)` : ''}"></button>
-      <button type="button" class="cor-sign" data-s-room="${id}" tabindex="-1" aria-hidden="true"><span>${subj.name}</span></button>
+      <button type="button" class="cor-sign" data-s-room="${id}" tabindex="-1" aria-hidden="true"></button>
       ${id === rec ? '<span class="cor-arrow" aria-hidden="true"></span>' : ''}
       ${due ? `<span class="cor-due" aria-hidden="true">${sImg(`${SCH}bubble.png`)}</span>` : ''}
     </div>`;
   }).join('');
   return `<div class="cor" id="corridor">
-      <div class="cor-strip">${doors}<div class="cor-tile" style="--i:2">
+      <div class="cor-strip"><div class="cor-home">${doors}<div class="cor-tile t2">
         <button type="button" class="cor-door" data-go="after" aria-label="방과후교실로 들어가기 (사귄 친구들과 복습)"></button>
-        <button type="button" class="cor-sign after" data-go="after" tabindex="-1" aria-hidden="true"><span>방과후</span></button>
-      </div><div class="cor-tile end" style="--i:3"></div></div>
+        <button type="button" class="cor-sign" data-go="after" tabindex="-1" aria-hidden="true"></button>
+      </div></div></div>
     </div>
     <div class="s-top-right">
       ${roundBtn('data-go="settings"', '<span class="s-round-txt">⚙</span>', '설정')}
@@ -128,7 +129,7 @@ function screenRoom() {
       let who = '';
       if (t.state === 'current') who = `${sImg(`${SCH}sparkle.png`, 'seat-sparkle')}${sImg(`${SCH}ghost.png`, 'seat-person ghost glow')}`;
       else if (t.state === 'locked') who = sImg(`${SCH}ghost.png`, 'seat-person ghost dim');
-      else who = `${faceImg(t.friend, 'seat-person')}${t.state === 'review' ? sImg(`${SCH}bubble.png`, 'seat-bubble') : ''}`;
+      else who = `${deskImg(t.friend, 'seat-person')}${t.state === 'review' ? sImg(`${SCH}bubble.png`, 'seat-bubble') : ''}`;
       const label =
         t.state === 'current' ? `새 친구를 만나요: ${t.ch.title}${t.sim ? ' (이어서 하기)' : ''}` :
         t.state === 'review' ? `${josa(t.friend.name, '이', '가')} 기다려요: ${t.ch.title}` :
@@ -136,7 +137,7 @@ function screenRoom() {
       return `<button type="button" class="seat seat-${t.state}" style="left:${left}px;top:${top}px" data-s-seat="${t.ch.id}" aria-label="${esc(label)}">
           <span class="seat-who">${who}</span>
           ${sImg(`${SCH}${t.state === 'locked' ? 'desk-locked' : 'desk'}.png`, 'seat-desk')}
-          ${t.state === 'current' && t.sim ? '<span class="seat-tag"><span aria-hidden="true">▶</span> 이어서</span>' : ''}
+          ${t.state === 'current' && t.sim ? '<span class="seat-tag"><span class="sr-only">이어서</span></span>' : ''}
         </button>`;
     })
     .join('');
@@ -247,6 +248,13 @@ function welcomeSheet() {
 function faceImg(f, cls) {
   const look = friendLook(f);
   return `<img src="${look.sprite}" class="${cls || 's-sheet-face'}" alt="" aria-hidden="true" draggable="false"${look.tint ? ` style="filter:${look.tint}"` : ''}>`;
+}
+
+/** 책상에 앉은 모습: 작은 픽셀 그림이 있으면 그걸 써요. */
+function deskImg(f, cls) {
+  const look = friendLook(f);
+  if (!look.px) return faceImg(f, cls);
+  return `<img src="${look.px}" class="${cls} px" alt="" aria-hidden="true" draggable="false">`;
 }
 
 function restSheet() {
@@ -382,11 +390,13 @@ function screenQuiz() {
   else action = `<button type="button" class="s-submit" data-submit ${ready ? '' : 'disabled'}>${input === 'pencil' ? '다 썼어요!' : '제출하기'}</button>`;
 
   const progress = test
-    ? `<div class="q-hunt-head" role="status"><span aria-hidden="true">🗺️</span> 문제를 풀고 안내도 조각을 모아 보자! <b>${(s.k || 0) + 1}/10</b></div>`
+    ? `<div class="q-hunt-head" role="status"><span aria-hidden="true">🗺️</span> 안내도 조각 ${(s.k || 0) + 1} · 문제 <b>${(s.j || 0) + 1}/${HUNT_PER}</b></div>`
     : '';
 
-  return `<div class="s-bg bg-check" aria-hidden="true"></div>
-    <div class="sst-wrap"><div class="sst quiz">
+  // 배경: 지금 이야기 장소(친구와 같은 곳) · 레벨 테스트는 조각을 찾은 곳
+  const qbg = test && s ? `" style="background-image:url('${HUNT_BG[huntPlaceOf(s)]}')` : s && TALK_BGS.includes(s.bg) ? ` bg-${s.bg}` : ' bg-check';
+  return `<div class="s-bg q-scene${qbg}" aria-hidden="true"></div>
+    <div class="sst-wrap"><div class="sst quiz${test ? ' is-test' : ''}">
       ${backBtn('data-s-leave')}
       ${restBtn()}
       ${progress}
