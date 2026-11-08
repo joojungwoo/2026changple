@@ -12,17 +12,18 @@
 
 /** 친구 생김새: 작은 그림(교실 자리 · 문제 화면) + 큰 그림(대화). 큰 그림이 없으면 작은 그림을 크게 써요.
  *  tint: 같은 그림을 쓰는 친구를 구별하려고 색을 살짝 바꿔요. */
-/** 친구 그림: 큰 그림(640px, 대화 화면) · 작은 그림(-s, 200px, 자리 · 팝업 · 문제 화면) */
+/** 친구 그림: 큰 그림(640px, 대화 화면) · 작은 그림(-s, 200px, 팝업 · 문제 화면)
+ *  px: 책상에 앉아 있는 작은 픽셀 그림 (교실 자리 · 방과후교실). 없으면 작은 그림을 써요. */
 const CHR = 'assets/school/chars/';
 const FRIEND_LOOKS = {
-  jia: { sprite: `${CHR}jia-s.png`, portrait: `${CHR}jia.png` },
-  taeo: { sprite: `${CHR}taeo-s.png`, portrait: `${CHR}taeo.png` },
+  jia: { sprite: `${CHR}jia-s.png`, portrait: `${CHR}jia.png`, px: `${CHR}jia-px.png` },
+  taeo: { sprite: `${CHR}taeo-s.png?v=5`, portrait: `${CHR}taeo.png?v=5`, px: `${CHR}taeo-px.png` },
   yerin: { sprite: `${CHR}yerin-s.png`, portrait: `${CHR}yerin.png` },
   hyunwoo: { sprite: `${CHR}hyunwoo-s.png`, portrait: `${CHR}hyunwoo.png` },
   soyul: { sprite: `${CHR}soyul-s.png`, portrait: `${CHR}soyul.png` },
-  doyun: { sprite: `${CHR}doyun-s.png`, portrait: `${CHR}doyun.png` },
+  doyun: { sprite: `${CHR}doyun-s.png?v=5`, portrait: `${CHR}doyun.png?v=5`, px: `${CHR}doyun-px.png` },
   harin: { sprite: `${CHR}harin-s.png`, portrait: `${CHR}harin.png` },
-  sua: { sprite: `${CHR}sua-s.png`, portrait: `${CHR}sua.png` },
+  sua: { sprite: `${CHR}sua-s.png`, portrait: `${CHR}sua.png`, px: `${CHR}sua-px.png` },
   minjun: { sprite: `${CHR}minjun-s.png`, portrait: `${CHR}minjun.png` },
   dain: { sprite: `${CHR}dain-s.png`, portrait: `${CHR}dain.png` },
 };

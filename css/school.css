@@ -337,7 +337,7 @@ body[data-anim='off'] .school *, body[data-anim='off'] .school *::before { anima
 
 /* 이야기 장소 배경 (전용 그림이 오기 전까지 비슷한 그림을 써요) */
 .bg-gate { background-image: url('../assets/school/bg/school.jpg'); background-color: #9fd3f0; image-rendering: auto; }
-.bg-stairs { background-image: url('../assets/school/bg/stairs.jpg'); background-color: #d9c8a8; image-rendering: auto; }
+.bg-stairs { background-image: url('../assets/school/bg/stairs.jpg?v=5'); background-color: #d9c8a8; image-rendering: auto; }
 .bg-storage { background-image: url('../assets/school/bg/playground.jpg'); background-color: #c9a878; image-rendering: auto; }
 .bg-videoroom { background-image: url('../assets/school/bg/classroom.jpg'); background-color: #b9a88c; image-rendering: auto; }
 .bg-preproom { background-image: url('../assets/school/bg/classroom.jpg'); background-color: #d9c39b; image-rendering: auto; }
@@ -401,3 +401,79 @@ body[data-anim='off'] .school *, body[data-anim='off'] .school *::before { anima
 @media (prefers-reduced-motion: reduce) {
   .hunt-piece.blink { animation-duration: 3s; }
 }
+
+/* =========================== 5차 수정 =========================== */
+/* 책상에 앉은 친구: 작은 픽셀 그림은 또렷하게 */
+.school img.px { image-rendering: pixelated; }
+.seat-person.px { left: 22px; bottom: -6px; width: auto; height: 96px; animation: none; }
+.seat-done .seat-person.px, .seat-review .seat-person.px { animation: s-breathe 3s ease-in-out infinite; }
+
+/* 방과후교실: 새 그림, 친구들은 책상에 가만히 앉아 있어요. */
+.af-wrap { display: block; min-height: 100dvh; padding: 0; background: #d9a85e; }
+.af-room { position: relative; width: 1021px; margin: 0 auto; zoom: min(calc(100vw / 1021px), .56); background: url('../assets/school/after/room.jpg') 0 0 / 1021px auto no-repeat; overflow: hidden; }
+.af-hint { position: absolute; left: 50%; top: 372px; transform: translateX(-50%); margin: 0; padding: 8px 26px; background: rgba(255, 255, 255, .88); border: 4px solid #6b4a20; border-radius: 22px; font-family: var(--s-text); font-size: 30px; color: #5b4630; white-space: nowrap; z-index: 1; }
+.af-hint:empty { display: none; }
+.af-seat { position: absolute; z-index: 2; }
+.af-kid { position: absolute; top: 0; height: 295px; transform: translateX(-50%); display: flex; align-items: flex-end; }
+.af-kid-img { height: 240px; width: auto; }
+.af-kid-img:not(.px) { height: 200px; margin-bottom: 20px; }
+.af-front { position: absolute; left: 0; top: 250px; width: 100%; }
+.af-name { position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%); padding: 4px 18px; background: rgba(255, 255, 255, .92); border: 4px solid #2b2b2b; border-radius: 16px; font-family: var(--s-bold); font-size: 30px; color: #2b2b2b; white-space: nowrap; }
+.af-seat:active .af-kid { transform: translate(-50%, -8px); }
+.af-seat:focus-visible { outline: 6px dashed #6b4a20; outline-offset: 4px; }
+.af-empty { inset: 560px 120px auto; background: rgba(255, 255, 255, .88); border-radius: 24px; }
+.af-empty b { font-size: 44px; } .af-empty p { font-size: 32px; }
+
+/* 홈(복도): 새 문 그림 한 장 (수학 · 국어 · 방과후). 화면 높이에 맞추고 옆으로 넘겨요. */
+.cor-home { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 1728 / 910; background: url('../assets/school/home.jpg') 0 0 / 100% 100% no-repeat; image-rendering: auto; }
+.cor-home .cor-tile { position: absolute; top: 0; width: 33.333%; height: 100%; aspect-ratio: auto; background: none; }
+.cor-home .t0 { left: 0; } .cor-home .t1 { left: 33.333%; } .cor-home .t2 { left: 66.667%; }
+.cor-home .cor-door { top: 6.2%; height: 72.7%; width: 56%; }
+.cor-home .t0 .cor-door { left: 10.4%; } .cor-home .t1 .cor-door { left: 11.8%; } .cor-home .t2 .cor-door { left: 14.2%; }
+.cor-home .cor-sign { top: 27.5%; height: 6.5%; width: 22%; }
+.cor-home .t0 .cor-sign { left: 68.7%; } .cor-home .t1 .cor-sign { left: 71%; } .cor-home .t2 .cor-sign { left: 72.9%; }
+.cor-home .cor-arrow { top: 15%; width: 7%; }
+.cor-home .t0 .cor-arrow { left: 76.2%; } .cor-home .t1 .cor-arrow { left: 78.5%; }
+.cor-home .cor-due { top: 0; width: 13%; }
+.cor-home .t0 .cor-due { left: 58%; } .cor-home .t1 .cor-due { left: 59.5%; }
+
+/* "이어서": 픽셀 단추 그림 */
+.seat-tag { top: -128px; width: 124px; height: 69px; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: url('../assets/school/btn-continue.png') center / 100% 100% no-repeat; image-rendering: pixelated; }
+.seat-tag::after { content: none; }
+
+/* 문제 화면: 이야기 장소 배경 (글이 잘 보이게 옅은 막을 씌워요) */
+.s-bg.q-scene { background-size: cover; background-position: center; image-rendering: auto; }
+.s-bg.q-scene::after { content: ''; position: absolute; inset: 0; background: rgba(255, 252, 244, .38); }
+
+/* 레벨 테스트 (5차): 조각 5개 · 디자인 맞춤 */
+.hunt-count { display: flex; align-items: center; gap: 6px; border-radius: 22px; border-color: #3d5a80; background: #eef6ff; }
+.hunt-count-ico { width: 30px; height: 26px; background: #f2dfb4; border: 2px solid #8a6a3a; clip-path: polygon(0 10%, 30% 0, 55% 8%, 100% 0, 94% 50%, 100% 100%, 60% 92%, 30% 100%, 0 92%, 6% 50%); }
+.hunt-piece.idle { cursor: default; pointer-events: none; opacity: .95; }
+.hunt-paper { box-shadow: inset 0 0 0 2px rgba(139, 100, 50, .35); }
+.hunt-got { inset: 0; z-index: 5; background: rgba(30, 20, 5, .45); animation: s-fade .3s ease-out; }
+.hunt-rays { position: absolute; left: 50%; top: 440px; width: 760px; height: 760px; margin: -380px 0 0 -380px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 240, 160, .95) 0 14%, rgba(255, 214, 90, .55) 30%, transparent 62%), repeating-conic-gradient(rgba(255, 226, 120, .55) 0 8deg, transparent 8deg 20deg);
+  -webkit-mask: radial-gradient(circle, #000 35%, transparent 68%); mask: radial-gradient(circle, #000 35%, transparent 68%); animation: hunt-spin 12s linear infinite; }
+@keyframes hunt-spin { to { transform: rotate(360deg); } }
+.hunt-got .hunt-fly { top: 440px; animation: hunt-pop .6s cubic-bezier(.3, 1.4, .5, 1); filter: drop-shadow(0 0 16px #ffe680) drop-shadow(0 8px 6px rgba(0, 0, 0, .3)); }
+@keyframes hunt-pop { from { transform: translate(-50%, -50%) scale(.3) rotate(-14deg); opacity: 0; } }
+.hunt-ribbon { position: absolute; left: 40px; right: 40px; top: 690px; margin: 0; padding: 18px 20px; border: 4px solid #7a5a2a; border-radius: 10px; background: linear-gradient(#fff6d6, #f6e2a8); box-shadow: 0 0 0 4px #e8c26a, 0 6px 0 rgba(0, 0, 0, .25); font-family: var(--s-bold); font-size: 25px; color: #3b2f22; text-align: center; animation: s-pop .35s ease-out .3s backwards; }
+.hunt-got-tap { inset: 0; z-index: 6; background: none; }
+.hunt-map-dim { inset: 0; z-index: 3; background: rgba(40, 28, 10, .5); animation: s-fade .4s ease-out; }
+.step-map .hunt-tile { z-index: 4; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .3)); }
+.step-map .hunt-tile:nth-of-type(n) { animation-duration: .8s; }
+.hunt-final-img { left: 0; top: -26px; width: 595px; height: 893px; object-fit: cover; z-index: 5; opacity: 0; animation: s-fade-in 1s ease-out 3.4s forwards; pointer-events: none; }
+@keyframes s-fade-in { to { opacity: 1; } }
+.hunt-final-tap { inset: 0; z-index: 6; background: none; pointer-events: none; animation: hunt-tap-on 0s linear 4.4s forwards; }
+@keyframes hunt-tap-on { to { pointer-events: auto; } }
+/* 폰에서는 문 하나와 팻말이 화면 너비에 다 들어오게 (위아래 남는 곳은 벽 · 바닥 색) */
+.cor:has(.cor-home) { background: linear-gradient(#ded2ba 50%, #df9b4a 50%); }
+.cor-strip:has(.cor-home) { height: min(100dvh, 158vw); margin-top: max(0px, calc((100dvh - 158vw) / 2)); }
+.seat-person.px { left: 0; right: 0; margin: 0 auto; bottom: -10px; height: 118px; }
+.af-hint { position: fixed; left: 50%; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 10; padding: 8px 18px; border-width: 3px; border-radius: 18px; font-size: 16px; box-shadow: 0 3px 0 rgba(0, 0, 0, .2); }
+.af-room { margin-bottom: 70px; }
+/* 레벨 테스트: 교과서 문제 그대로 — 자릿값 색 · 점 같은 도움 표시는 빼요. */
+.sst.quiz.is-test .q-body .pv { color: inherit; padding-bottom: 0; }
+.sst.quiz.is-test .q-body .pv::after, .sst.quiz.is-test .q-body .pv-legend { display: none; }
+.sst.quiz.is-test .pv-cell-1, .sst.quiz.is-test .pv-cell-10, .sst.quiz.is-test .pv-cell-100 { box-shadow: none; }
+.hunt-got .hunt-fly { position: absolute; left: 50%; }

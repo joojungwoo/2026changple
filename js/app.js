@@ -718,8 +718,6 @@ function render() {
   talkAfterRender();
   huntAfterRender();
   introAfterRender();
-  if (State.screen === 'after') AfterSchool.start();
-  else AfterSchool.stop();
   if (State.screen === 'home') {
     const c = document.getElementById('corridor');
     if (c && State.corridorX) c.scrollLeft = State.corridorX;

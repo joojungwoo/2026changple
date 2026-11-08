@@ -1,19 +1,19 @@
 /* =========================================================================
  * afterschool.js — 방과후교실 (자율 복습)
  *
- *  - 수학 · 국어에서 이미 사귄 친구들이 교실 바닥 칸을 따라 가로 · 세로로만 돌아다녀요.
+ *  - 수학 · 국어에서 이미 사귄 친구들이 방과후교실 책상에 앉아 있어요. (돌아다니지 않아요)
  *  - 친구를 누르면 "나와 또 놀고 싶구나!" 같은 말(돌아가며 다양하게)을 하고, 그 단원을 복습할 수 있어요.
  *  - 자율 복습은 소단원마다 3문제, 한 번에 최대 10문제. 복습 날짜(느낌표)와는 따로예요.
  * ========================================================================= */
 
-const AFTER_COLS = 7;
-const AFTER_ROWS = 8;
-const AFTER_CELL = 64; // 무대 너비 448 = 7칸
+/** 방과후교실 그림 (assets/school/after/room.jpg, 너비 1021) — 책상 9개.
+ *  [의자 가운데 x, 의자 위 y, 책상 앞 그림 left, top, right, bottom]
+ *  위 세 자리는 원래 그림의 책상이고, 친구가 늘면 아래로 책상이 이어져요. */
+const AFTER_W = 1021;
+const AFTER_DESKS = [[326, 532, 190, 580, 450, 815], [724, 740, 585, 793, 855, 1035], [304, 1002, 160, 1055, 445, 1315], [724, 1240, 588, 1288, 848, 1523], [326, 1480, 190, 1528, 450, 1763], [724, 1720, 588, 1768, 848, 2003], [326, 1960, 190, 2008, 450, 2243], [724, 2200, 588, 2248, 848, 2483], [326, 2440, 190, 2488, 450, 2723]];
+const AFTER_IMG = 'assets/school/after/';
 
 const AfterSchool = {
-  timer: null,
-  pos: {}, // chapterId → { c, r, dir }
-
   /** 사귄 친구들 (단원마다 한 명) */
   friends() {
     const data = Store.getData();
@@ -22,85 +22,35 @@ const AfterSchool = {
       .filter((x) => x.ch)
       .sort((a, b) => SUBJECT_ORDER.indexOf(a.ch.subject) - SUBJECT_ORDER.indexOf(b.ch.subject) || CHAPTERS.indexOf(a.ch) - CHAPTERS.indexOf(b.ch));
   },
-
-  /** 처음 자리: 겹치지 않게 칸을 나눠 줘요. */
-  place(list) {
-    const taken = new Set(Object.values(this.pos).map((p) => `${p.c},${p.r}`));
-    list.forEach((x, i) => {
-      if (this.pos[x.ch.id]) return;
-      for (let k = 0; k < AFTER_COLS * AFTER_ROWS; k++) {
-        const cell = (i * 11 + k * 5) % (AFTER_COLS * AFTER_ROWS);
-        const c = cell % AFTER_COLS;
-        const r = Math.floor(cell / AFTER_COLS);
-        if (!taken.has(`${c},${r}`)) {
-          taken.add(`${c},${r}`);
-          this.pos[x.ch.id] = { c, r, dir: 'down' };
-          break;
-        }
-      }
-    });
-  },
-
-  /** 한 걸음: 친구마다 위 · 아래 · 왼쪽 · 오른쪽 중 하나로 한 칸 (가끔은 가만히) */
-  step() {
-    const ids = Object.keys(this.pos);
-    const taken = new Set(ids.map((id) => `${this.pos[id].c},${this.pos[id].r}`));
-    const moves = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
-    ids.forEach((id) => {
-      if (Math.random() < 0.35) return;
-      const p = this.pos[id];
-      const dirs = Object.keys(moves).sort(() => Math.random() - 0.5);
-      for (const d of dirs) {
-        const c = p.c + moves[d][0];
-        const r = p.r + moves[d][1];
-        if (c < 0 || r < 0 || c >= AFTER_COLS || r >= AFTER_ROWS || taken.has(`${c},${r}`)) continue;
-        taken.delete(`${p.c},${p.r}`);
-        taken.add(`${c},${r}`);
-        Object.assign(p, { c, r, dir: d });
-        const el = document.querySelector(`[data-a-friend="${id}"]`);
-        if (el) {
-          el.style.left = `${c * AFTER_CELL}px`;
-          el.style.top = `${r * AFTER_CELL}px`;
-          el.dataset.dir = d;
-        }
-        break;
-      }
-    });
-  },
-
-  start() {
-    this.stop();
-    if (document.body.dataset.anim === 'off' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    this.timer = setInterval(() => {
-      if (State.screen !== 'after') return this.stop();
-      if (!State.sheet) this.step();
-    }, 1100);
-  },
-  stop() {
-    clearInterval(this.timer);
-    this.timer = null;
-  },
 };
 
 function screenAfter() {
-  const list = AfterSchool.friends();
-  AfterSchool.place(list);
+  const list = AfterSchool.friends().slice(0, AFTER_DESKS.length);
+  const used = Math.max(3, list.length);
+  const H = Math.max(1540, AFTER_DESKS[used - 1][5] + 90);
   const kids = list
-    .map((x) => {
-      const p = AfterSchool.pos[x.ch.id];
-      return `<button type="button" class="af-kid" data-a-friend="${x.ch.id}" data-dir="${p.dir}" style="left:${p.c * AFTER_CELL}px;top:${p.r * AFTER_CELL}px" aria-label="${esc(x.friend.name)}랑 놀기 (${esc(getSubject(x.ch.subject).name)} · ${esc(x.ch.title)})">
-          ${faceImg(x.friend, 'af-sprite')}
+    .map((x, i) => {
+      const [cx, , l, t, r, b] = AFTER_DESKS[i];
+      const look = friendLook(x.friend);
+      const img = look.px
+        ? `<img src="${look.px}" class="af-kid-img px" alt="" draggable="false">`
+        : `<img src="${look.sprite}" class="af-kid-img" alt="" draggable="false">`;
+      return `<button type="button" class="af-seat" data-a-friend="${x.ch.id}" style="left:${l}px;top:${t - 250}px;width:${r - l}px;height:${b - t + 250}px" aria-label="${esc(x.friend.name)}랑 놀기 (${esc(getSubject(x.ch.subject).name)} · ${esc(x.ch.title)})">
+          <span class="af-kid" style="left:${cx - l}px">${img}</span>
+          <img src="${AFTER_IMG}front-${i + 1}.png" class="af-front" alt="" draggable="false">
           <span class="af-name">${esc(x.friend.name)}</span>
         </button>`;
     })
     .join('');
   const empty = list.length
     ? ''
-    : `<div class="af-empty"><b>아직 사귄 친구가 없어요</b><p>수학 · 국어 교실에서 친구를 사귀면\n여기서 같이 놀 수 있어요!</p></div>`;
+    : `<div class="af-empty"><b>아직 사귄 친구가 없어요</b><p>수학 · 국어 교실에서 친구를 사귀면\n여기 책상에 앉아 있을 거예요!</p></div>`;
   return `<div class="af-wrap">
-      <header class="af-head"><h1>방과후교실</h1><p>친구를 누르면 같이 복습할 수 있어요</p></header>
-      <div class="af-floor" style="width:${AFTER_COLS * AFTER_CELL}px;height:${AFTER_ROWS * AFTER_CELL + 14}px">${kids}${empty}</div>
+      <div class="af-room" style="height:${H}px" role="group" aria-label="방과후교실">
+        ${kids}${empty}
+      </div>
     </div>
+    ${list.length ? '<p class="af-hint">친구를 누르면 같이 복습할 수 있어요</p>' : ''}
     <div class="s-fixed-back">${backBtn('data-go="home"')}</div>
     ${State.sheet && State.sheet.kind === 'after' ? afterSheet() : ''}`;
 }
@@ -138,7 +88,6 @@ function afterSheet() {
     const play = ev.target.closest('[data-a-play]');
     if (play) {
       State.sheet = null;
-      AfterSchool.stop();
       return Sim.open(play.dataset.aPlay, 'free');
     }
   });
