@@ -25,7 +25,8 @@ const SchoolStage = {
   update() {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const col = Math.min(w, h * 0.75);
+    // 교실 · 방과후교실도 대화 · 문제 무대(595×842)와 같은 너비가 되게 해요. (아이패드 세로 · 가로 · 미니 모두)
+    const col = Math.min(w, (h * 595) / 842);
     document.documentElement.style.setProperty('--su', String(Math.min(w / 595, h / 842)));
     document.documentElement.style.setProperty('--ru', String(col / 512));
     document.documentElement.style.setProperty('--ch', String(h / 768));
