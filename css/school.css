@@ -482,3 +482,6 @@ body[data-anim='off'] .school *, body[data-anim='off'] .school *::before { anima
 .demo-skip { position: fixed; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 60; padding: 10px 18px; border: 3px solid #2b2b2b; border-radius: 16px; background: #ffe36e; font-family: var(--s-bold); font-size: 18px; color: #3b2f2f; box-shadow: 0 4px 0 rgba(0, 0, 0, .25); }
 .demo-skip:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, .25); }
 .school img.px.soft { image-rendering: auto; }
+
+/* 방과후교실: 교실 · 대화 무대와 같은 너비(--ru)로 맞춰요. */
+.af-room { zoom: calc(var(--ru) * 512 / 1021); }
