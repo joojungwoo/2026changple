@@ -57,6 +57,7 @@ function screenSettings() {
       ${settingGroup('layout', '화면 배치', '자동은 iPad를 돌리는 방향을 따라가요. 가로면 문제와 풀이가 나란히 보여요.')}
       ${settingGroup('anim', '움직이는 효과', '문제를 푸는 동안에는 늘 꺼져 있어요. 기기에서 "동작 줄이기"를 켜도 꺼져요.')}
       ${pf.anim === 'off' ? '' : settingGroup('animTheme', '쓸어넘기기 효과', '화면을 손가락으로 쓸면 반응해요. 이 화면에서 바로 쓸어 보세요.')}
+      ${typeof Demo !== 'undefined' ? Demo.settingsBlock() : ''}
     </main>`;
 }
 
