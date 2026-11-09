@@ -27,13 +27,13 @@ const AfterSchool = {
 function screenAfter() {
   const list = AfterSchool.friends().slice(0, AFTER_DESKS.length);
   const used = Math.max(3, list.length);
-  const H = Math.max(1540, AFTER_DESKS[used - 1][5] + 90);
+  const H = Math.max(1540, AFTER_DESKS[Math.min(used, AFTER_DESKS.length - 1)][5] + 70); // 빈 책상 하나까지 보여요
   const kids = list
     .map((x, i) => {
       const [cx, , l, t, r, b] = AFTER_DESKS[i];
       const look = friendLook(x.friend);
       const img = look.px
-        ? `<img src="${look.px}" class="af-kid-img px" alt="" draggable="false">`
+        ? `<img src="${look.px}" class="af-kid-img px${look.soft ? ' soft' : ''}" alt="" draggable="false">`
         : `<img src="${look.sprite}" class="af-kid-img" alt="" draggable="false">`;
       return `<button type="button" class="af-seat" data-a-friend="${x.ch.id}" style="left:${l}px;top:${t - 250}px;width:${r - l}px;height:${b - t + 250}px" aria-label="${esc(x.friend.name)}랑 놀기 (${esc(getSubject(x.ch.subject).name)} · ${esc(x.ch.title)})">
           <span class="af-kid" style="left:${cx - l}px">${img}</span>

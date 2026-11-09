@@ -213,7 +213,6 @@ function screenTalk() {
   const bg = TALK_BGS.includes(s.bg) ? s.bg : 'classroom';
   return `<div class="s-bg bg-${bg}" aria-hidden="true"></div>
     <div class="sst-wrap"><div class="sst talk">
-      ${backBtn('data-s-leave')}
       ${restBtn()}
       ${n.t === 'card' ? '' : `<div class="talk-person ${showPerson ? '' : 'away'} ${n.t === 'choice' ? 'choosing' : ''}">${portraitHtml(f, mood)}</div>`}
       ${over}
@@ -254,7 +253,7 @@ function faceImg(f, cls) {
 function deskImg(f, cls) {
   const look = friendLook(f);
   if (!look.px) return faceImg(f, cls);
-  return `<img src="${look.px}" class="${cls} px" alt="" aria-hidden="true" draggable="false">`;
+  return `<img src="${look.px}" class="${cls} px${look.soft ? ' soft' : ''}" alt="" aria-hidden="true" draggable="false">`;
 }
 
 function restSheet() {
@@ -397,7 +396,6 @@ function screenQuiz() {
   const qbg = test && s ? `" style="background-image:url('${HUNT_BG[huntPlaceOf(s)]}')` : s && TALK_BGS.includes(s.bg) ? ` bg-${s.bg}` : ' bg-check';
   return `<div class="s-bg q-scene${qbg}" aria-hidden="true"></div>
     <div class="sst-wrap"><div class="sst quiz${test ? ' is-test' : ''}">
-      ${backBtn('data-s-leave')}
       ${restBtn()}
       ${progress}
       <section class="q-card rep-${rep}">

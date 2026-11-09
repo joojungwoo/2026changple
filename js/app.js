@@ -709,6 +709,7 @@ function render() {
 
   Profile.apply();
   app.innerHTML = (views[State.screen] || screenCorridor)();
+  if (typeof Demo !== 'undefined') app.insertAdjacentHTML('beforeend', Demo.skipButton()); // 시연 계정 건너뛰기
   app.className = `screen-${State.screen}${FIGMA_SCREENS.includes(State.screen) ? ' figma' : ''}${SCHOOL_SCREENS.includes(State.screen) ? ' school' : ''}`;
   Layout.update();
   applySkin();
