@@ -175,6 +175,33 @@ const Demo = {
   },
 };
 
+/* test01: 수학 1단원(지아) 첫 문제는 늘 "딸기만 세기" (딸기 · 바나나를 섞어 헷갈리지 않게) */
+const DEMO_FIRST_Q = withChapter(
+  {
+    id: 'm1-1-demo1', sub: 0, type: 'step', level: '중',
+    visual: '🍓 🍌 🍓 🍓 🍓 🍓 🍌',
+    text: '딸기만 세면 몇 개인가요?',
+    steps: ['① 🍓에만 ○를 해.', '② ○를 한 것만 하나씩 짚으며 세어 봐. 몇 개일까?'],
+    choices: ['7개', '5개', '4개'], answer: 1,
+    hint: '🍌 바나나는 세지 마!\n🍓만 하나씩 짚으며 "하나, …" 하고 세어 봐.\n마지막에 말한 수가 답이야.',
+    solution: '🍓만 세면 5개야. (바나나는 2개)',
+  },
+  CHAPTER_BY_ID['m1-1']
+);
+QUESTION_BY_ID[DEMO_FIRST_Q.id] = DEMO_FIRST_Q;
+(function pinFirstProblem() {
+  const show = Sim.show;
+  Sim.show = function () {
+    const s = this.s;
+    const n = this.node();
+    if (Demo.run() && s && s.kind === 'learn' && s.chapterId === 'm1-1' && n && n.t === 'problem' && !(s.used || []).length) {
+      n.qid = DEMO_FIRST_Q.id;
+      n.ci = 0;
+    }
+    return show.call(this);
+  };
+})();
+
 /* 시연 중에는 Store가 이 탭의 시연 기록만 읽고 써요. */
 (function patchStore() {
   const read = Store._read;
